@@ -1,5 +1,4 @@
 // Vercel 함수가 쓰는 데이터: SOOP 게시판(30초 기억)과 배포에 같이 들어간 schedule.txt
-import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,8 +7,8 @@ import { recentOwnPosts } from './lib.mjs';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const config = JSON.parse(await fs.readFile(path.join(root, 'config.json'), 'utf-8'));
 
-// 게시판 첫 쪽. 비밀 판(priv)은 Vercel 환경 변수 SOOP_COOKIE(본인 로그인 쿠키)를 붙여
-// 즐겨찾기 전용 글까지 받는다. 같은 API가 .com과 .co.kr 두 주소에 있어 하나가 안 되면 다른 쪽을 쓴다.
+// 게시판 첫 쪽. Vercel 환경 변수 SOOP_COOKIE(본인 로그인 쿠키)가 있으면 붙여서
+// 즐겨찾기 전용 글까지 받는다(사용자 요청: 본인만 쓰는 주소라 공개판에 넣음). 같은 API가 .com과 .co.kr 두 주소에 있어 하나가 안 되면 다른 쪽을 쓴다.
 async function fetchBoard(cookie) {
     try {
         return await fetchBoardFrom('api-channel.sooplive.com', cookie);
@@ -31,53 +30,34 @@ async function fetchBoardFrom(host, cookie) {
     return recentOwnPosts(board, config.soopId, 20);
 }
 
-let lastPrivateError = '';
-const caches = { public: { at: 0, request: null }, private: { at: 0, request: null } };
-function cachedBoard(priv) {
-    const slot = caches[priv ? 'private' : 'public'];
-    if (slot.request && Date.now() - slot.at < 30000) return slot.request;
-    const request = priv
-        ? // 쿠키가 없거나 만료돼 실패하면 공개 글로 대신한다
-          (process.env.SOOP_COOKIE ? fetchBoard(process.env.SOOP_COOKIE) : Promise.reject(new Error('SOOP_COOKIE 없음'))).then(
-              posts => ((lastPrivateError = ''), posts),
+let lastCookieError = '';
+let boardCache = { at: 0, request: null };
+function cachedBoard() {
+    if (boardCache.request && Date.now() - boardCache.at < 30000) return boardCache.request;
+    const cookie = process.env.SOOP_COOKIE || '';
+    const request = cookie
+        ? fetchBoard(cookie).then(
+              posts => ((lastCookieError = ''), posts),
               e => {
-                  // 잘못되거나 만료된 쿠키면 SOOP이 500을 준다
-                  lastPrivateError = e.message;
-                  console.error('비밀 판 게시판:', e.message);
-                  return cachedBoard(false);
+                  // 잘못되거나 만료된 쿠키면 SOOP이 500을 준다. 그때는 공개 글로 대신한다.
+                  lastCookieError = e.message;
+                  console.error('쿠키로 게시판 읽기 실패:', e.message);
+                  return fetchBoard('');
               }
           )
         : fetchBoard('');
-    slot.at = Date.now();
-    slot.request = request;
-    request.catch(() => { if (slot.request === request) slot.request = null; });
+    boardCache = { at: Date.now(), request };
+    request.catch(() => { if (boardCache.request === request) boardCache = { at: 0, request: null }; });
     return request;
 }
 
-export const recentPosts = (priv = false) => cachedBoard(priv).then(posts => posts.slice(0, config.noticeCount));
+export const recentPosts = () => cachedBoard().then(posts => posts.slice(0, config.noticeCount));
 
-// 비밀 판 상태(상태 화면용): 공개 목록에 없는 글이 보이면 즐겨찾기 글까지 받고 있는 것
-export async function privateStatus() {
-    const [mine, pub] = await Promise.all([cachedBoard(true), cachedBoard(false)]);
+// /status 화면용: 쿠키로 받은 목록에 공개 목록에 없는 글이 있으면 즐겨찾기 글까지 받고 있는 것
+export async function cookieStatus() {
+    const [mine, pub] = await Promise.all([cachedBoard(), fetchBoard('')]);
     const pubIds = new Set(pub.map(p => p.titleNo));
-    return { hasCookie: !!process.env.SOOP_COOKIE, error: lastPrivateError, extra: mine.filter(p => !pubIds.has(p.titleNo)) };
-}
-
-// 주소의 p(비밀키)를 확인한다. 없으면 공개 판, 맞으면 비밀 판, 틀리면 null(404).
-export function access(q) {
-    const p = q.get('p');
-    if (p === null) return { priv: false, prefix: '/' };
-    const key = process.env.PRIVATE_KEY || '';
-    if (key.length < 16) return null;
-    const a = Buffer.from(p), b = Buffer.from(key);
-    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-    return { priv: true, prefix: `/p/${key}/` };
-}
-
-export function notFound(res) {
-    res.statusCode = 404;
-    res.setHeader('Cache-Control', 'no-store');
-    res.end('Not found');
+    return { hasCookie: !!process.env.SOOP_COOKIE, error: lastCookieError, extra: mine.filter(p => !pubIds.has(p.titleNo)) };
 }
 
 // 편집 화면에서 저장하면 커밋 → Vercel이 다시 배포하므로 파일만 읽으면 된다

@@ -5,11 +5,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import img from '../api/img.js';
 import go from '../api/go.js';
-import priv from '../api/private.js';
+import status from '../api/status.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const vercel = JSON.parse(await fs.readFile(path.join(root, 'vercel.json'), 'utf-8'));
-const handlers = { '/api/img': img, '/api/go': go, '/api/private': priv };
+const handlers = { '/api/img': img, '/api/go': go, '/api/status': status };
 const toRegex = src =>
     new RegExp('^' + src.replace(/[.]/g, '\\.').replace(/:(\w+)\(([^)]+)\)/g, '(?<$1>$2)').replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$');
 const types = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript', '.json': 'application/json' };
