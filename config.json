@@ -1,0 +1,14 @@
+{
+    "name": "소주양",
+    "soopId": "soju2022",
+    "noticeCount": 3,
+    "schedule": {
+        "personKeywords": ["주양", "쏘", "소주"],
+        "teamNames": ["캄몬"],
+        "link": "https://ststats.github.io/staruniv/schedule/"
+    },
+    "supabase": {
+        "url": "https://czqxedrayvgxirvlveon.supabase.co",
+        "key": "sb_publishable_IR8bO6EBPYX7GZcP4fDB6g_CjbFP90x"
+    }
+}
