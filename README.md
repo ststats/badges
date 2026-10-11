@@ -16,8 +16,10 @@
 
 ## 구조
 
-- **Vercel 함수**(`api/img.js`, `api/go.js`): 요청이 오면 SOOP 게시판을 읽고(30초 기억) `src/render.mjs`가
-  satori + resvg로 PNG를 그립니다. CDN이 1분 기억하고, 그 뒤 10분까지는 지난 그림을 주면서 뒤에서 새로 그립니다.
+- **Vercel 함수**(`api/img.js`, `api/go.js`): `/notice-1.png`로 요청이 오면 SOOP 게시판을 읽고(30초 기억)
+  그림에 나오는 내용의 해시를 붙인 `/notice-1.<해시>.png`로 보냅니다(CDN 1분). 해시 주소는 `src/render.mjs`가
+  satori + resvg로 **한 번만** 그리고 CDN이 계속 씁니다. 내용이 바뀔 때만 그려서 Vercel 무료 한도
+  (Active CPU 월 4시간, 스타유니브·시너지와 같은 계정 합산)를 거의 쓰지 않습니다.
   프로필(움직이는 GIF)·사진은 sharp로 줄여 넣고, 머리 배경은 프로필을 미리 흐려 만듭니다. 이모지는 Twemoji.
 - **정적 파일**(`public/`, 배포 때 `scripts/vercel-public.mjs`가 만듦): 일정 편집 화면 `/edit/`, 코드 모음 `/`.
 - **일정**은 저장소의 `schedule.txt`. 편집 화면에서 저장하면 커밋되고 Vercel이 다시 배포합니다(1분 남짓).

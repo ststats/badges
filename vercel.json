@@ -9,13 +9,41 @@
         }
     },
     "rewrites": [
-        { "source": "/notice-:i(\\d).png", "destination": "/api/img?kind=notice&i=:i" },
-        { "source": "/schedule.png", "destination": "/api/img?kind=schedule" },
-        { "source": "/n/:i(\\d)", "destination": "/api/go?i=:i" },
-        { "source": "/n/:i(\\d)/", "destination": "/api/go?i=:i" }
+        {
+            "source": "/notice-:i(\\d).:v([0-9a-f]{12}).png",
+            "destination": "/api/img?kind=notice&i=:i&v=:v"
+        },
+        {
+            "source": "/schedule.:v([0-9a-f]{12}).png",
+            "destination": "/api/img?kind=schedule&v=:v"
+        },
+        {
+            "source": "/notice-:i(\\d).png",
+            "destination": "/api/img?kind=notice&i=:i"
+        },
+        {
+            "source": "/schedule.png",
+            "destination": "/api/img?kind=schedule"
+        },
+        {
+            "source": "/n/:i(\\d)",
+            "destination": "/api/go?i=:i"
+        },
+        {
+            "source": "/n/:i(\\d)/",
+            "destination": "/api/go?i=:i"
+        }
     ],
     "redirects": [
-        { "source": "/s", "destination": "https://www.sooplive.co.kr/station/soju2022", "permanent": false },
-        { "source": "/s/", "destination": "https://www.sooplive.co.kr/station/soju2022", "permanent": false }
+        {
+            "source": "/s",
+            "destination": "https://www.sooplive.co.kr/station/soju2022",
+            "permanent": false
+        },
+        {
+            "source": "/s/",
+            "destination": "https://www.sooplive.co.kr/station/soju2022",
+            "permanent": false
+        }
     ]
 }
