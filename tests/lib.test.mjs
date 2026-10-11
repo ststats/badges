@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSchedule, recentOwnPosts, redirectHtml, weekDates, weekSchedule } from '../src/lib.mjs';
+import { parseSchedule, postText, recentOwnPosts, redirectHtml, weekDates, weekSchedule } from '../src/lib.mjs';
 
 test('이번 주는 한국 시간 월요일부터', () => {
     // 2026-10-11 15:30 UTC = 10-12(월) 00:30 KST
@@ -46,4 +46,10 @@ test('이동 페이지는 주소를 스크립트 밖으로 새지 않게 넣는�
     const html = redirectHtml('https://example.com/a"</script><b>');
     assert.ok(!html.includes('</script><b>'));
     assert.ok(html.includes('content="0;url=https://example.com/a&quot;'));
+});
+
+test('본문은 HTML에서 줄바꿈을 살려 뽑는다', () => {
+    const post = { content: { textContent: '잘린 글 ...', content: '<p dpt=1>첫 줄&nbsp;&amp;</p><p></p><p></p><p>둘<br>셋 &#x1F600;</p>' } };
+    assert.equal(postText(post), '첫 줄 &\n\n둘\n셋 \u{1F600}');
+    assert.equal(postText({ content: { textContent: '가<br>나' } }), '가\n나');
 });

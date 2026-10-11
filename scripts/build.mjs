@@ -12,7 +12,7 @@ import {
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'dist');
 const config = JSON.parse(await fs.readFile(path.join(root, 'config.json'), 'utf-8'));
-const baseUrl = (process.env.BASE_URL || 'https://ststats.github.io/sojuyang-badges').replace(/\/$/, '');
+const baseUrl = (process.env.BASE_URL || 'https://ststats.github.io/badges').replace(/\/$/, '');
 const now = Date.now();
 
 async function getJson(url, headers = {}) {
@@ -42,7 +42,7 @@ const days = weekSchedule(schedule, now);
 const badges = [
     ...Array.from({ length: noticeCount }, (_, i) => ({
         file: `notice-${i + 1}.png`,
-        html: noticeBadgeHtml({ name, soopId, post: posts[i] }),
+        html: noticeBadgeHtml({ name, soopId, post: posts[i], lines: config.noticeLines?.[i] }),
         linkPath: `n/${i + 1}/`,
         target: posts[i] ? postUrl(soopId, posts[i].titleNo) : boardUrl(soopId),
         label: `최근 글 ${i + 1}`,

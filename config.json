@@ -2,6 +2,7 @@
     "name": "소주양",
     "soopId": "soju2022",
     "noticeCount": 3,
+    "noticeLines": [10, 3, 3],
     "schedule": {
         "link": "https://www.sooplive.co.kr/station/soju2022",
         "footer": "클릭하면 방송국으로"

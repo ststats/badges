@@ -8,10 +8,10 @@
 | 최근 글 1~3 | `notice-1.png` ~ `notice-3.png` | `n/1/` ~ `n/3/` → 그 글의 SOOP 원글 |
 | 주간 일정(월~일) | `schedule.png` | `s/` → 소주양 방송국 |
 
-붙여 넣을 코드는 배포된 첫 화면(`https://ststats.github.io/sojuyang-badges/`)에 있습니다. 예:
+붙여 넣을 코드는 배포된 첫 화면(`https://ststats.github.io/badges/`)에 있습니다. 예:
 
 ```html
-<a href="https://ststats.github.io/sojuyang-badges/n/1/"><img src="https://ststats.github.io/sojuyang-badges/notice-1.png" alt="소주양 최근 글 1"></a>
+<a href="https://ststats.github.io/badges/n/1/"><img src="https://ststats.github.io/badges/notice-1.png" alt="소주양 최근 글 1"></a>
 ```
 
 ## 일정 적기
@@ -33,7 +33,7 @@ GitHub에서 [`schedule.txt`](schedule.txt)를 열고 연필(Edit) 버튼 → �
 
 ## 최근 글
 
-SOOP 방송국 게시판 첫 쪽에서 소주양 본인 글(고정 공지 포함) 최신 3개. 이미지는 제목과 본문 앞 3줄까지 보여 줍니다.
+SOOP 방송국 게시판 첫 쪽에서 소주양 본인 글(고정 공지 포함) 최신 3개. 본문은 가장 최근 글이 10줄, 나머지 두 개가 3줄까지 보입니다(`config.json`의 `noticeLines`).
 이미지라서 커뮤니티 안에서 '더보기'로 펼칠 수는 없고, 누르면 원글이 열립니다.
 
 대상·링크 등은 `config.json`에서 바꿉니다.
@@ -45,7 +45,7 @@ SOOP 방송국 게시판 첫 쪽에서 소주양 본인 글(고정 공지 포함
 
 - `schedule.txt` 등을 main에 올릴 때 바로, 그리고 새 글을 반영하려고 30분마다(`schedule`) 돕니다. GitHub 정기 실행은 늦어지기도 하고 저장소에 60일간
   커밋이 없으면 꺼지므로, 제때 돌리려면 cron-job.org에서
-  `POST https://api.github.com/repos/ststats/sojuyang-badges/actions/workflows/build.yml/dispatches`
+  `POST https://api.github.com/repos/ststats/badges/actions/workflows/build.yml/dispatches`
   (본문 `{"ref":"main"}`, Actions: Read and write 토큰)를 부르세요. 스타유니브 빌드와 같은 방식입니다.
 - GitHub Pages는 이미지를 10분 캐시합니다. 커뮤니티가 이미지를 자체 서버에 복사해 두는 곳이면 그 커뮤니티 쪽에서 늦게 바뀔 수 있습니다.
 

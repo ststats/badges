@@ -100,11 +100,32 @@ export function formatPostDate(regDate) {
     return m ? `${Number(m[2])}.${Number(m[3])} (${weekdayOf(`${m[1]}-${m[2]}-${m[3]}`)}) ${m[4]}:${m[5]}` : '';
 }
 
-const postText = post =>
-    String(post?.content?.textContent || '')
-        .replace(/<br\s*\/?>/gi, '\n')
+const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", apos: "'", nbsp: ' ' };
+const decodeEntities = s =>
+    s.replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (m, e) => {
+        if (e[0] === '#') {
+            const code = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : Number(e.slice(1));
+            return Number.isFinite(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : m;
+        }
+        return ENTITIES[e.toLowerCase()] ?? m;
+    });
+
+// textContent는 200자 남짓에서 '...'로 잘리고 문단 줄바꿈도 없다. 본문 HTML(content.content)에서 글자만 뽑는다.
+export function postText(post) {
+    const html = post?.content?.content;
+    const text = html
+        ? decodeEntities(
+              String(html)
+                  .replace(/<(script|style)[\s\S]*?<\/\1>/gi, '')
+                  .replace(/<br\s*\/?>|<\/(p|div|li|h\d)>/gi, '\n')
+                  .replace(/<[^>]*>/g, '')
+          )
+        : String(post?.content?.textContent || '').replace(/<br\s*\/?>/gi, '\n');
+    return text
+        .replace(/[ \t]+\n/g, '\n')
         .replace(/\n{3,}/g, '\n\n')
         .trim();
+}
 
 // Pretendard는 러너에 한글 글꼴이 없어도 같은 모양으로 찍히게 웹 글꼴로 싣는다
 const FONT_CSS =
@@ -132,13 +153,14 @@ const NOTICE_CSS = `
 .title { font-size: 17px; font-weight: 700; margin-top: 10px; line-height: 1.35;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: keep-all; overflow-wrap: anywhere; }
 .snippet { font-size: 14px; line-height: 1.5; color: #4a5263; margin-top: 6px; white-space: pre-wrap;
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; word-break: keep-all; overflow-wrap: anywhere; }
+  display: -webkit-box; -webkit-line-clamp: var(--lines, 3); -webkit-box-orient: vertical; overflow: hidden; word-break: keep-all; overflow-wrap: anywhere; }
 .thumb { width: 104px; height: 104px; border-radius: 10px; object-fit: cover; flex: none; background: #eef1f6; }
 .go { font-size: 12px; font-weight: 600; color: #3b5bdb; margin-top: 10px; }
 .empty { font-size: 15px; padding: 18px 0 6px; }
 `;
 
-export function noticeBadgeHtml({ name, soopId, post }) {
+// lines: 본문을 몇 줄까지 보여 줄지(최신 글은 길게)
+export function noticeBadgeHtml({ name, soopId, post, lines = 3 }) {
     const avatar = post?.profileImage || `https://profile.img.sooplive.com/LOGO/${soopId.slice(0, 2)}/${soopId}/${soopId}.jpg`;
     const top = `<div class="top"><img class="avatar" src="${escapeHTML(avatar)}" alt="" onerror="this.style.visibility='hidden'">
       <div class="top-text"><div class="name">${escapeHTML(name)}</div>
@@ -151,7 +173,7 @@ export function noticeBadgeHtml({ name, soopId, post }) {
         NOTICE_CSS,
         `<div id="badge"><div class="main">${top}
           <div class="title">${escapeHTML(post.titleName || '(제목 없음)')}</div>
-          ${text ? `<div class="snippet">${escapeHTML(text)}</div>` : ''}
+          ${text ? `<div class="snippet" style="--lines:${Number(lines) || 3}">${escapeHTML(text)}</div>` : ''}
           <div class="go">원글 보기 ›</div></div>
           ${thumb ? `<img class="thumb" src="${escapeHTML(thumb)}" alt="" onerror="this.remove()">` : ''}</div>`
     );
