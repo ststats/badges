@@ -1,0 +1,21 @@
+{
+    "buildCommand": "node scripts/vercel-public.mjs",
+    "outputDirectory": "public",
+    "functions": {
+        "api/*.js": {
+            "includeFiles": "{fonts/**,schedule.txt,config.json}",
+            "memory": 1024,
+            "maxDuration": 20
+        }
+    },
+    "rewrites": [
+        { "source": "/notice-:i(\\d).png", "destination": "/api/img?kind=notice&i=:i" },
+        { "source": "/schedule.png", "destination": "/api/img?kind=schedule" },
+        { "source": "/n/:i(\\d)", "destination": "/api/go?i=:i" },
+        { "source": "/n/:i(\\d)/", "destination": "/api/go?i=:i" }
+    ],
+    "redirects": [
+        { "source": "/s", "destination": "https://www.sooplive.co.kr/station/soju2022", "permanent": false },
+        { "source": "/s/", "destination": "https://www.sooplive.co.kr/station/soju2022", "permanent": false }
+    ]
+}

@@ -93,7 +93,7 @@ export function weekSchedule({ events, offAir }, nowMs) {
 }
 
 const mmdd = date => `${Number(date.slice(5, 7))}.${Number(date.slice(8, 10))}`;
-const weekdayOf = date => WEEKDAYS[new Date(date + 'T00:00:00Z').getUTCDay()];
+export const weekdayOf = date => WEEKDAYS[new Date(date + 'T00:00:00Z').getUTCDay()];
 
 // 편집 화면이 저장할 때 쓴다. 연도가 헷갈리지 않게 날짜는 늘 YYYY-MM-DD로 적는다.
 export function serializeSchedule({ events, offAir }, header = '') {
