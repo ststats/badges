@@ -1,13 +1,19 @@
 // /status: 로그인 쿠키(SOOP_COOKIE)가 잘 먹는지와 지금 뱃지에 들어가는 글
+// /status.json: 같은 내용을 편집 화면이 읽어 쿠키 만료를 알린다
+//   state: none(쿠키 없음) | error(SOOP이 거절) | stale(즐겨찾기 글이 하나도 안 보임 → 만료 의심) | ok
 import { escapeHTML, formatPostDate } from '../src/lib.mjs';
-import { config, cookieStatus, recentPosts } from '../src/live.mjs';
+import { config, cookieStatus, query, recentPosts } from '../src/live.mjs';
 
 export default async function handler(req, res) {
     let status;
+    let state = 'error';
+    let extraCount = 0;
     let posts = [];
     try {
         const { hasCookie, error, extra } = await cookieStatus();
         posts = await recentPosts();
+        extraCount = extra.length;
+        state = !hasCookie ? 'none' : error ? 'error' : extra.length ? 'ok' : 'stale';
         status = !hasCookie
             ? '쿠키 없음: 공개 글만 나옵니다. 즐겨찾기 글까지 넣으려면 Vercel 환경 변수 SOOP_COOKIE를 넣고 Redeploy 하세요.'
             : error
@@ -17,6 +23,13 @@ export default async function handler(req, res) {
                 : '쿠키는 들어 있지만 최근 글 20개 중 즐겨찾기 전용 글이 없습니다(지금 없거나, 쿠키가 로그인 상태가 아닐 수 있습니다).';
     } catch (e) {
         status = `게시판을 읽지 못했습니다: ${escapeHTML(e.message)}`;
+        state = 'unknown';
+    }
+    if (query(req).get('format') === 'json') {
+        res.statusCode = 200;
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store');
+        return res.end(JSON.stringify({ state, extraCount, posts: posts.map(p => ({ title: p.titleName, date: p.regDate })) }));
     }
     res.statusCode = 200;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');

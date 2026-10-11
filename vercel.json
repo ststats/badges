@@ -36,6 +36,10 @@
         {
             "source": "/status",
             "destination": "/api/status"
+        },
+        {
+            "source": "/status.json",
+            "destination": "/api/status?format=json"
         }
     ],
     "redirects": [

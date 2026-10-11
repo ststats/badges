@@ -19,6 +19,10 @@ header { position: sticky; top: 0; z-index: 5; background: rgba(250, 250, 250, .
 .btn:disabled { opacity: .4; cursor: default; }
 .status { font-size: 13px; color: var(--sub); width: 100%; }
 .status.err { color: var(--red); } .status.ok { color: var(--green); }
+.cookie { width: 100%; font-size: 13px; font-weight: 600; border-radius: 10px; padding: 8px 12px; }
+.cookie.warn { background: #fff4f4; color: var(--red); border: 1px solid #fcd5d5; }
+.cookie.good { background: #f0fdf4; color: var(--green); border: 1px solid #c8f0d4; padding: 4px 10px; font-weight: 500; }
+.cookie a { color: inherit; }
 main { max-width: 1160px; margin: 0 auto; padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr) 640px; gap: 24px; align-items: start; }
 @media (max-width: 1100px) { main { grid-template-columns: minmax(0, 1fr); } }
 .week { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
@@ -60,6 +64,7 @@ details ol { padding-left: 18px; margin: 8px 0; }
   <button class="btn" id="reload" type="button">다시 불러오기</button>
   <button class="btn primary" id="save" type="button" disabled>저장</button>
   <div class="status" id="status">불러오는 중…</div>
+  <div class="cookie" id="cookie" hidden></div>
 </div></header>
 <main>
   <section>
@@ -302,6 +307,28 @@ $('next').addEventListener('click', () => { weekOffset++; render(); });
 addEventListener('beforeunload', e => { if (dirty) e.preventDefault(); });
 
 load();
+
+// SOOP 쿠키 상태(Vercel에서만 있음, GitHub Pages 판에서는 조용히 넘어간다)
+const COOKIE_TEXT = {
+    error: '⚠️ SOOP 쿠키가 만료됐거나 잘못됐어요. 즐겨찾기 전용 글이 뱃지에 안 나와요. 새 쿠키를 Vercel 환경 변수 SOOP_COOKIE에 넣고 Redeploy 해 주세요.',
+    stale: '⚠️ 즐겨찾기 전용 글이 하나도 안 보여요. SOOP 쿠키가 만료됐을 수 있어요. 새 쿠키를 Vercel 환경 변수 SOOP_COOKIE에 넣고 Redeploy 해 주세요.',
+    none: '⚠️ SOOP 쿠키가 없어요. 공개 글만 나와요.',
+};
+fetch('../status.json', { cache: 'no-store' })
+    .then(r => (r.ok ? r.json() : null))
+    .then(st => {
+        if (!st || !st.state || st.state === 'unknown') return;
+        const box = $('cookie');
+        box.hidden = false;
+        if (st.state === 'ok') {
+            box.className = 'cookie good';
+            box.textContent = `SOOP 쿠키 정상(즐겨찾기 글 ${st.extraCount}개 보임)`;
+        } else {
+            box.className = 'cookie warn';
+            box.innerHTML = `${COOKIE_TEXT[st.state] || COOKIE_TEXT.error} <a href="../status">자세히</a>`;
+        }
+    })
+    .catch(() => {});
 </script>
 </body>
 </html>
