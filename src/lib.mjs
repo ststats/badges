@@ -132,97 +132,135 @@ const FONT_CSS =
     '<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">';
 
 const BASE_CSS = `
+:root { --ink: #221d26; --sub: #6e6676; --faint: #aaa2b3; --line: #f1e8ee; --accent: #e64980; --accent-2: #ff8fb1; --soft: #fff1f6; }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { background: transparent; }
-body { font-family: Pretendard, 'Noto Sans KR', sans-serif; color: #1c2230; -webkit-font-smoothing: antialiased; }
-#badge { display: inline-block; background: #fff; border: 1px solid #e3e7ef; border-radius: 16px; overflow: hidden; }
-.avatar { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; background: #eef1f6; flex: none; }
-.name { font-size: 14px; font-weight: 700; color: #3b5bdb; }
-.muted { color: #8a93a6; }
+body { font-family: Pretendard, 'Noto Sans KR', sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; letter-spacing: -0.01em; }
+#badge { display: inline-block; width: 600px; background: #fff; border: 1px solid var(--line); border-radius: 20px; overflow: hidden; position: relative; }
+.avatar { border-radius: 50%; object-fit: cover; background: var(--soft); flex: none; }
+.wrap { word-break: keep-all; overflow-wrap: anywhere; }
 `;
 
 const page = (title, css, body) =>
     `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>${escapeHTML(title)}</title>${FONT_CSS}<style>${BASE_CSS}${css}</style></head><body>${body}</body></html>`;
 
+const avatarUrl = (soopId, post) =>
+    post?.profileImage || `https://profile.img.sooplive.com/LOGO/${soopId.slice(0, 2)}/${soopId}/${soopId}.jpg`;
+
 const NOTICE_CSS = `
-#badge { width: 600px; display: flex; gap: 14px; padding: 16px 18px; align-items: flex-start; }
-.main { flex: 1; min-width: 0; }
-.top { display: flex; gap: 10px; align-items: center; }
-.top-text { min-width: 0; }
-.meta { font-size: 12px; margin-top: 2px; }
-.title { font-size: 17px; font-weight: 700; margin-top: 10px; line-height: 1.35;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: keep-all; overflow-wrap: anywhere; }
-.snippet { font-size: 14px; line-height: 1.5; color: #4a5263; margin-top: 6px; white-space: pre-wrap;
-  display: -webkit-box; -webkit-line-clamp: var(--lines, 3); -webkit-box-orient: vertical; overflow: hidden; word-break: keep-all; overflow-wrap: anywhere; }
-.thumb { width: 104px; height: 104px; border-radius: 10px; object-fit: cover; flex: none; background: #eef1f6; }
-.go { font-size: 12px; font-weight: 600; color: #3b5bdb; margin-top: 10px; }
-.empty { font-size: 15px; padding: 18px 0 6px; }
+#badge::before { content: ''; position: absolute; inset: 0 0 auto; height: 4px; background: linear-gradient(90deg, var(--accent-2), var(--accent)); }
+.body { padding: 20px 22px 18px; }
+.top { display: flex; align-items: center; gap: 10px; }
+.top .avatar { width: 38px; height: 38px; box-shadow: 0 0 0 2px #fff, 0 0 0 3.5px var(--accent-2); }
+.who { flex: 1; min-width: 0; }
+.name { font-size: 14px; font-weight: 800; }
+.date { font-size: 12px; color: var(--faint); margin-top: 1px; }
+.chip { font-size: 11.5px; font-weight: 800; color: var(--accent); background: var(--soft); border-radius: 999px; padding: 5px 10px; }
+.title { font-size: 19px; font-weight: 800; line-height: 1.35; margin-top: 14px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.text { font-size: 14.5px; line-height: 1.6; color: #4b4452; margin-top: 8px; white-space: pre-wrap;
+  display: -webkit-box; -webkit-line-clamp: var(--lines, 3); -webkit-box-orient: vertical; overflow: hidden; }
+.photos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 14px; }
+.ph { position: relative; aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: var(--soft); }
+.ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.more { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(34, 29, 38, .45); color: #fff; font-size: 20px; font-weight: 800; }
+.go { display: inline-flex; align-items: center; gap: 4px; margin-top: 14px; font-size: 13px; font-weight: 800; color: var(--accent); }
+.compact .body { display: flex; gap: 16px; }
+.compact .main { flex: 1; min-width: 0; }
+.compact .title { font-size: 16.5px; margin-top: 12px; }
+.compact .text { font-size: 14px; margin-top: 5px; }
+.compact .go { margin-top: 10px; }
+.thumb { position: relative; width: 96px; height: 96px; border-radius: 14px; overflow: hidden; flex: none; align-self: center; background: var(--soft); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb .more { font-size: 15px; inset: auto 6px 6px auto; padding: 2px 7px; border-radius: 999px; background: rgba(34, 29, 38, .6); }
+.empty { font-size: 15px; color: var(--faint); margin-top: 16px; }
 `;
 
-// lines: 본문을 몇 줄까지 보여 줄지(최신 글은 길게)
+const photoUrls = post => (post?.photos || []).map(p => p?.url).filter(Boolean);
+
+// lines가 3보다 크면 사진을 본문 아래에 크게(최신 글), 아니면 오른쪽 작은 사진 한 장
 export function noticeBadgeHtml({ name, soopId, post, lines = 3 }) {
-    const avatar = post?.profileImage || `https://profile.img.sooplive.com/LOGO/${soopId.slice(0, 2)}/${soopId}/${soopId}.jpg`;
-    const top = `<div class="top"><img class="avatar" src="${escapeHTML(avatar)}" alt="" onerror="this.style.visibility='hidden'">
-      <div class="top-text"><div class="name">${escapeHTML(name)}</div>
-      <div class="meta muted">${post ? `${escapeHTML(formatPostDate(post.regDate))} · 방송국 글` : '방송국 글'}</div></div></div>`;
-    if (!post) return page(`${name} 공지`, NOTICE_CSS, `<div id="badge"><div class="main">${top}<div class="empty muted">아직 글이 없습니다</div></div></div>`);
-    const text = postText(post);
-    const thumb = post.photos?.[0]?.url;
-    return page(
-        `${name} 공지`,
-        NOTICE_CSS,
-        `<div id="badge"><div class="main">${top}
-          <div class="title">${escapeHTML(post.titleName || '(제목 없음)')}</div>
-          ${text ? `<div class="snippet" style="--lines:${Number(lines) || 3}">${escapeHTML(text)}</div>` : ''}
-          <div class="go">원글 보기 ›</div></div>
-          ${thumb ? `<img class="thumb" src="${escapeHTML(thumb)}" alt="" onerror="this.remove()">` : ''}</div>`
-    );
+    const featured = Number(lines) > 3;
+    const top = `<div class="top"><img class="avatar" src="${escapeHTML(avatarUrl(soopId, post))}" alt="" onerror="this.style.visibility='hidden'">
+      <div class="who"><div class="name">${escapeHTML(name)}</div>
+      ${post ? `<div class="date">${escapeHTML(formatPostDate(post.regDate))}</div>` : ''}</div>
+      ${featured ? '<span class="chip">최신 글</span>' : ''}</div>`;
+    if (!post)
+        return page(`${name} 글`, NOTICE_CSS, `<div id="badge"><div class="body">${top}<div class="empty">아직 글이 없습니다</div></div></div>`);
+    // 짧은 뱃지는 빈 줄이 몇 줄 안 되는 자리를 먹지 않게 뺀다
+    const text = featured ? postText(post) : postText(post).replace(/\n{2,}/g, '\n');
+    const photos = photoUrls(post);
+    const img = url => `<img src="${escapeHTML(url)}" alt="" onerror="this.parentNode.remove()">`;
+    const moreTag = n => (n > 0 ? `<span class="more">+${n}</span>` : '');
+    const main = `${top}
+      <div class="title wrap">${escapeHTML(post.titleName || '(제목 없음)')}</div>
+      ${text ? `<div class="text wrap" style="--lines:${Number(lines) || 3}">${escapeHTML(text)}</div>` : ''}`;
+    const go = '<div class="go">원글 보기 <span>›</span></div>';
+    const body = featured
+        ? `<div class="body">${main}
+            ${photos.length ? `<div class="photos">${photos.slice(0, 4).map((u, i) => `<div class="ph">${img(u)}${i === 3 ? moreTag(photos.length - 4) : ''}</div>`).join('')}</div>` : ''}
+            ${go}</div>`
+        : `<div class="body"><div class="main">${main}${go}</div>
+            ${photos.length ? `<div class="thumb">${img(photos[0])}${moreTag(photos.length - 1)}</div>` : ''}</div>`;
+    return page(`${name} 글`, NOTICE_CSS, `<div id="badge"${featured ? '' : ' class="compact"'}>${body}</div>`);
 }
 
 const SCHEDULE_CSS = `
-#badge { width: 760px; padding: 16px 18px 18px; }
-.head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
-.head h1 { font-size: 18px; font-weight: 800; }
-.head .range { font-size: 13px; margin-left: auto; }
-.grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
-.day { border: 1px solid #e8ecf3; border-radius: 10px; padding: 8px 7px; min-height: 120px; background: #fafbfd; }
-.day.today { border-color: #3b5bdb; background: #f1f4ff; }
-.day.off { background: #f6f6f8; }
-.dh { display: flex; align-items: baseline; gap: 4px; margin-bottom: 6px; }
-.dh .wd { font-size: 13px; font-weight: 800; }
-.dh .dt { font-size: 12px; }
-.sun .wd { color: #e03131; } .sat .wd { color: #1971c2; }
-.today .dh .dt { color: #3b5bdb; font-weight: 700; }
-.ev { border-radius: 6px; padding: 5px 6px; margin-top: 5px; background: #fff; border-left: 3px solid #3b5bdb; }
-.ev .t { font-size: 11px; font-weight: 700; color: #6b7487; }
-.ev .d { font-size: 12.5px; font-weight: 700; line-height: 1.3; word-break: keep-all; overflow-wrap: anywhere; margin-top: 1px; }
-.offtag { display: inline-block; font-size: 11.5px; font-weight: 700; color: #868e96; background: #e9ecef; border-radius: 5px; padding: 3px 7px; margin-top: 4px; }
-.none { font-size: 12px; color: #c0c6d2; margin-top: 4px; }
-.foot { font-size: 11.5px; margin-top: 10px; text-align: right; }
+.head { display: flex; align-items: center; gap: 12px; padding: 18px 22px; color: #fff;
+  background: linear-gradient(120deg, var(--accent-2) 0%, var(--accent) 100%); }
+.head .avatar { width: 42px; height: 42px; box-shadow: 0 0 0 2.5px rgba(255, 255, 255, .85); }
+.head .ttl { flex: 1; min-width: 0; }
+.head .eyebrow { font-size: 11px; font-weight: 800; letter-spacing: .14em; opacity: .8; }
+.head h1 { font-size: 20px; font-weight: 800; margin-top: 2px; }
+.head .range { font-size: 13px; font-weight: 800; background: rgba(255, 255, 255, .22); border-radius: 999px; padding: 6px 12px; }
+.list { padding: 6px 0; }
+.row { display: flex; gap: 14px; padding: 11px 22px; border-top: 1px solid var(--line); position: relative; }
+.row:first-child { border-top: 0; }
+.day { width: 46px; flex: none; text-align: center; padding-top: 1px; }
+.wd { font-size: 17px; font-weight: 800; }
+.dt { font-size: 12px; color: var(--faint); margin-top: 1px; font-variant-numeric: tabular-nums; }
+.sun .wd { color: #f03e3e; } .sat .wd { color: #4263eb; }
+.evs { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 7px; }
+.ev { display: flex; align-items: baseline; gap: 10px; }
+.tm { flex: none; min-width: 58px; text-align: center; font-size: 12.5px; font-weight: 800; color: var(--accent);
+  background: var(--soft); border-radius: 8px; padding: 4px 8px; font-variant-numeric: tabular-nums; }
+.tm.tbd { color: var(--sub); background: #f4f2f6; }
+.what { font-size: 15.5px; font-weight: 700; line-height: 1.4; }
+.none { font-size: 14px; color: #cfc8d6; }
+.off .wd, .off .dt { opacity: .45; }
+.offtag { align-self: flex-start; font-size: 13px; font-weight: 800; color: var(--sub); background: #f1eff4; border-radius: 8px; padding: 4px 12px; }
+.today { background: var(--soft); }
+.today::before { content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 4px; border-radius: 0 4px 4px 0; background: var(--accent); }
+.today .dt { color: var(--accent); font-weight: 800; }
+.today .tm { background: #fff; }
+.today .tm.tbd { background: #fff; }
+.foot { text-align: center; font-size: 12px; color: var(--faint); padding: 10px 0 14px; border-top: 1px solid var(--line); }
 `;
 
-export function scheduleBadgeHtml({ name, days, today, footer }) {
-    const cells = days
+export function scheduleBadgeHtml({ name, soopId, days, today, footer }) {
+    const rows = days
         .map(({ date, offAir, events }) => {
             const wd = weekdayOf(date);
-            const cls = ['day', date === today && 'today', offAir && 'off', wd === '일' && 'sun', wd === '토' && 'sat'].filter(Boolean).join(' ');
+            const cls = ['row', date === today && 'today', offAir && 'off', wd === '일' && 'sun', wd === '토' && 'sat'].filter(Boolean).join(' ');
             const evs = events
-                .map(
-                    ev => `<div class="ev">${ev.time ? `<div class="t">${escapeHTML(ev.time)}</div>` : ''}
-                      <div class="d">${escapeHTML(ev.text)}</div></div>`
-                )
+                .map(ev => {
+                    const tm = ev.time ? `<span class="tm${TIME_RE.test(ev.time) ? '' : ' tbd'}">${escapeHTML(ev.time === '시간미정' ? '미정' : ev.time)}</span>` : '';
+                    return `<div class="ev">${tm}<span class="what wrap">${escapeHTML(ev.text)}</span></div>`;
+                })
                 .join('');
-            return `<div class="${cls}"><div class="dh"><span class="wd">${wd}</span><span class="dt muted">${mmdd(date)}</span></div>
-              ${offAir ? '<span class="offtag">휴방</span>' : ''}${evs}${!offAir && !events.length ? '<div class="none">-</div>' : ''}</div>`;
+            const content = `${offAir ? '<span class="offtag">휴방</span>' : ''}${evs}${!offAir && !events.length ? '<span class="none">일정 없음</span>' : ''}`;
+            return `<div class="${cls}"><div class="day"><div class="wd">${wd}</div><div class="dt">${mmdd(date)}</div></div><div class="evs">${content}</div></div>`;
         })
         .join('');
     return page(
         `${name} 주간 일정`,
         SCHEDULE_CSS,
-        `<div id="badge"><div class="head"><h1>${escapeHTML(name)} 주간 일정</h1>
-          <span class="range muted">${mmdd(days[0].date)} ~ ${mmdd(days[6].date)}</span></div>
-          <div class="grid">${cells}</div>
-          <div class="foot muted">${escapeHTML(footer)}</div></div>`
+        `<div id="badge"><div class="head"><img class="avatar" src="${escapeHTML(avatarUrl(soopId))}" alt="" onerror="this.remove()">
+          <div class="ttl"><div class="eyebrow">WEEKLY SCHEDULE</div><h1>${escapeHTML(name)} 주간 일정</h1></div>
+          <span class="range">${mmdd(days[0].date)} – ${mmdd(days[6].date)}</span></div>
+          <div class="list">${rows}</div>
+          ${footer ? `<div class="foot">${escapeHTML(footer)}</div>` : ''}</div>`
     );
 }
 

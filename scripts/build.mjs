@@ -1,5 +1,6 @@
 // SOOP 게시판과 schedule.txt로 뱃지 PNG와 원글 이동 페이지를 dist/에 만든다.
 // 하나라도 못 받으면 실패로 끝나 배포하지 않는다(이전에 배포된 뱃지가 그대로 남는다).
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -49,12 +50,25 @@ const badges = [
     })),
     {
         file: 'schedule.png',
-        html: scheduleBadgeHtml({ name, days, today: kstToday(now), footer: config.schedule.footer }),
+        html: scheduleBadgeHtml({ name, soopId, days, today: kstToday(now), footer: config.schedule.footer }),
         linkPath: 's/',
         target: config.schedule.link,
         label: '주간 일정',
     },
 ];
+
+// 뱃지 HTML·이동할 곳이 배포된 것과 같으면 찍지도 배포하지도 않는다(5분마다 확인해도 바뀔 때만 배포).
+// 그림에 갱신 시각을 넣지 않는 이유이기도 하다. FORCE=1(코드를 올릴 때)이면 늘 만든다.
+const state = crypto.createHash('sha256').update(JSON.stringify(badges.map(b => [b.file, b.html, b.target]))).digest('hex');
+const deployed = await fetch(`${baseUrl}/state.txt`, { cache: 'no-store', signal: AbortSignal.timeout(15000) })
+    .then(r => (r.ok ? r.text() : ''))
+    .catch(() => '');
+const changed = process.env.FORCE === '1' || deployed.trim() !== state;
+if (process.env.GITHUB_OUTPUT) await fs.appendFile(process.env.GITHUB_OUTPUT, `changed=${changed}\n`);
+if (!changed) {
+    console.log('바뀐 것이 없어 건너뜁니다');
+    process.exit(0);
+}
 
 await fs.rm(out, { recursive: true, force: true });
 await fs.mkdir(out, { recursive: true });
@@ -96,4 +110,5 @@ ${badges
 `
 );
 await fs.writeFile(path.join(out, '.nojekyll'), '');
+await fs.writeFile(path.join(out, 'state.txt'), state + '\n');
 console.log(`완료: 글 ${posts.length}개, 이번 주 일정 ${days.reduce((n, d) => n + d.events.length, 0)}개, 휴방 ${days.filter(d => d.offAir).length}일`);
