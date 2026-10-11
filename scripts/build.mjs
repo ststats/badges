@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import {
-    boardUrl, escapeHTML, kstStamp, kstToday, noticeBadgeHtml, parseSchedule, postUrl, recentOwnPosts, redirectHtml,
+    boardApiUrl, boardUrl, escapeHTML, kstStamp, kstToday, noticeBadgeHtml, parseSchedule, postUrl, recentOwnPosts, redirectHtml,
     scheduleBadgeHtml, weekSchedule,
 } from '../src/lib.mjs';
 import { avatarUrl, colorBanner } from '../src/render.mjs';
@@ -31,7 +31,7 @@ async function getJson(url, headers = {}) {
 }
 
 const { soopId, name, noticeCount } = config;
-const board = await getJson(`https://api-channel.sooplive.com/v1.1/channel/${encodeURIComponent(soopId)}/board?perPage=20&page=1`);
+const board = await getJson(boardApiUrl(soopId));
 if (!Array.isArray(board?.contents)) throw new Error('SOOP 게시판 응답 형식이 바뀌었습니다');
 
 // 못 읽은 줄은 빼고 만든다. Actions 실행 화면에 노란 경고로 남는다.

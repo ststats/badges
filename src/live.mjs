@@ -2,7 +2,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { recentOwnPosts } from './lib.mjs';
+import { boardApiUrl, recentOwnPosts } from './lib.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const config = JSON.parse(await fs.readFile(path.join(root, 'config.json'), 'utf-8'));
@@ -19,7 +19,7 @@ async function fetchBoard(cookie) {
 }
 
 async function fetchBoardFrom(host, cookie) {
-    const url = `https://${host}/v1.1/channel/${encodeURIComponent(config.soopId)}/board?perPage=20&page=1`;
+    const url = boardApiUrl(config.soopId, host);
     const headers = cookie
         ? { Cookie: cookie, Referer: `https://www.sooplive.co.kr/station/${config.soopId}/board`, 'User-Agent': 'Mozilla/5.0' }
         : {};

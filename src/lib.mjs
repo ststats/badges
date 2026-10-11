@@ -13,6 +13,11 @@ export const soopDateMs = s => Date.parse(String(s || '').replace(' ', 'T') + '+
 export const postUrl = (soopId, titleNo) =>
     `https://www.sooplive.co.kr/station/${encodeURIComponent(soopId)}/post/${encodeURIComponent(titleNo)}`;
 
+// 게시판 목록 API. 방송국 '전체 글' 화면이 부르는 것과 같은 값으로 부른다(로그인 쿠키를 붙이면 즐겨찾기 글도 온다).
+export const boardApiUrl = (soopId, host = 'api-channel.sooplive.com') =>
+    `https://${host}/v1.1/channel/${encodeURIComponent(soopId)}/board?perPage=20&startDate=&endDate=&` +
+    'field=title,contents,user_nick,user_id,hashtags&keyword=&type=all&orderBy=reg_date&page=1&bbsNo=';
+
 export const boardUrl = soopId => `https://www.sooplive.co.kr/station/${encodeURIComponent(soopId)}/board`;
 
 // 같은 글이 contents(일반 글)와 noticeData(고정 공지) 양쪽에 올 수 있다. 본인 글만 최신순으로.
