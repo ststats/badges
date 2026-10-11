@@ -9,6 +9,7 @@ import {
     boardUrl, escapeHTML, kstStamp, kstToday, noticeBadgeHtml, parseSchedule, postUrl, recentOwnPosts, redirectHtml,
     scheduleBadgeHtml, weekSchedule,
 } from '../src/lib.mjs';
+import { avatarUrl, colorBanner } from '../src/render.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'dist');
@@ -40,17 +41,20 @@ schedule.errors.forEach(e => console.log(`::warning file=schedule.txt::${e}`));
 const posts = recentOwnPosts(board, soopId, noticeCount);
 const days = weekSchedule(schedule, now);
 
+// 머리 배경: 프로필 사진 색으로 만든 그라데이션(실패하면 lib.mjs가 사진을 흐려 대신한다)
+const banner = await colorBanner(avatarUrl(soopId, posts[0]));
+
 const badges = [
     ...Array.from({ length: noticeCount }, (_, i) => ({
         file: `notice-${i + 1}.png`,
-        html: noticeBadgeHtml({ name, soopId, post: posts[i], lines: config.noticeLines?.[i] }),
+        html: noticeBadgeHtml({ name, soopId, post: posts[i], lines: config.noticeLines?.[i], banner }),
         linkPath: `n/${i + 1}/`,
         target: posts[i] ? postUrl(soopId, posts[i].titleNo) : boardUrl(soopId),
         label: `최근 글 ${i + 1}`,
     })),
     {
         file: 'schedule.png',
-        html: scheduleBadgeHtml({ name, soopId, days, today: kstToday(now), footer: config.schedule.footer }),
+        html: scheduleBadgeHtml({ name, soopId, days, today: kstToday(now), footer: config.schedule.footer, banner }),
         linkPath: 's/',
         target: config.schedule.link,
         label: '주간 일정',

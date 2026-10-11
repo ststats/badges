@@ -166,10 +166,11 @@ body { font-family: Pretendard, 'Noto Sans KR', sans-serif; color: var(--ink); -
 .card { width: 600px; background: #fff; border-radius: 22px; overflow: hidden; position: relative;
   box-shadow: 0 0 0 1px rgba(24, 24, 27, .06), 0 2px 4px rgba(24, 24, 27, .04), 0 8px 24px rgba(24, 24, 27, .08); }
 .hero { position: relative; overflow: hidden; color: #fff; isolation: isolate; }
-.hero .bg { position: absolute; inset: -40px; background-size: cover; background-position: center 30%;
-  filter: blur(22px) saturate(1.9) brightness(1.04); transform: scale(1.15); z-index: -2; }
+.hero .bg { position: absolute; inset: 0; background-size: cover; background-position: center; z-index: -2; }
+/* 미리 만든 색 배경(banner)이 없을 때(편집 화면 미리보기): 사진을 아주 크게 흐려 색만 남긴다 */
+.hero .bg.raw { inset: -120px; filter: blur(70px) saturate(1.3) brightness(1.05); }
 .hero::after { content: ''; position: absolute; inset: 0; z-index: -1;
-  background: linear-gradient(180deg, rgba(20, 20, 24, .06) 0%, rgba(20, 20, 24, .4) 100%); }
+  background: linear-gradient(180deg, rgba(20, 20, 24, .04) 0%, rgba(20, 20, 24, .3) 100%); }
 .avatar { border-radius: 50%; object-fit: cover; flex: none; background: #e4e4e7; }
 .hero .avatar { box-shadow: 0 0 0 2px rgba(255, 255, 255, .9), 0 4px 12px rgba(0, 0, 0, .2); }
 .wrap { word-break: keep-all; overflow-wrap: anywhere; }
@@ -187,8 +188,9 @@ const avatarUrl = (soopId, post) =>
 const ARROW_ICON =
     '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6h7M6.5 3l3 3-3 3"/></svg>';
 
-const hero = (soopId, post, inner) =>
-    `<div class="hero"><div class="bg" style="background-image:url('${escapeHTML(avatarUrl(soopId, post))}')"></div>${inner}</div>`;
+// banner: 프로필 사진 색으로 만든 배경(render.mjs colorBanner). 없으면 사진을 크게 흐려 대신한다.
+const hero = (soopId, post, inner, banner) =>
+    `<div class="hero"><div class="bg${banner ? '' : ' raw'}" style="background-image:url('${escapeHTML(banner || avatarUrl(soopId, post))}')"></div>${inner}</div>`;
 
 const NOTICE_CSS = `
 .hero .in { display: flex; align-items: center; gap: 12px; padding: 16px 22px; }
@@ -227,7 +229,7 @@ const NOTICE_CSS = `
 const photoUrls = post => (post?.photos || []).map(p => p?.url).filter(Boolean);
 
 // lines가 3보다 크면 사진을 본문 아래에 크게(최신 글), 아니면 오른쪽 작은 사진 한 장
-export function noticeBadgeHtml({ name, soopId, post, lines = 3 }) {
+export function noticeBadgeHtml({ name, soopId, post, lines = 3, banner }) {
     const featured = Number(lines) > 3;
     const head = hero(
         soopId,
@@ -235,7 +237,8 @@ export function noticeBadgeHtml({ name, soopId, post, lines = 3 }) {
         `<div class="in"><img class="avatar" src="${escapeHTML(avatarUrl(soopId, post))}" alt="" onerror="this.style.visibility='hidden'">
           <div class="who"><div class="name">${escapeHTML(name)}</div>
           ${post ? `<div class="date">${escapeHTML(formatPostDate(post.regDate))}</div>` : ''}</div>
-          ${featured ? '<span class="tag">NEW</span>' : ''}</div>`
+          ${featured ? '<span class="tag">NEW</span>' : ''}</div>`,
+        banner
     );
     const wrapCard = (cls, inner) => page(`${name} 글`, NOTICE_CSS, `<div id="badge"${cls ? ` class="${cls}"` : ''}><div class="card">${head}${inner}</div></div>`);
     if (!post) return wrapCard(featured ? '' : 'compact', '<div class="content"><div class="empty">아직 글이 없습니다</div></div>');
@@ -292,7 +295,7 @@ const SCHEDULE_CSS = `
 const MOON_ICON =
     '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M13.5 10.2A6 6 0 0 1 5.8 2.5a6 6 0 1 0 7.7 7.7Z"/></svg>';
 
-export function scheduleBadgeHtml({ name, soopId, days, today, footer }) {
+export function scheduleBadgeHtml({ name, soopId, days, today, footer, banner }) {
     const rows = days
         .map(({ date, offAir, events }) => {
             const wd = weekdayOf(date);
@@ -315,7 +318,8 @@ export function scheduleBadgeHtml({ name, soopId, days, today, footer }) {
             null,
             `<div class="in"><img class="avatar" src="${escapeHTML(avatarUrl(soopId))}" alt="" onerror="this.remove()">
               <div class="ttl"><small>이번 주 방송 일정</small><h1>${escapeHTML(name)}</h1></div>
-              <span class="range">${mmdd(days[0].date)} – ${mmdd(days[6].date)}</span></div>`
+              <span class="range">${mmdd(days[0].date)} – ${mmdd(days[6].date)}</span></div>`,
+            banner
         )}
           <div class="list">${rows}</div>
           ${footer ? `<div class="foot"><span class="btn">${escapeHTML(footer)} ${ARROW_ICON}</span></div>` : ''}</div></div>`

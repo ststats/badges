@@ -94,21 +94,26 @@ const card = (...children) =>
     );
 
 // 머리: 프로필 사진을 흐리게 깔고 어둡게 덮는다. 글자 쪽은 position:relative여야 흐림이 번지지 않는다.
-// 머리 배경: 프로필을 넓게 잘라 sharp로 미리 흐리고 채도를 올린다(satori의 blur는 테두리 밖으로 번진다)
+// 머리 배경: 프로필 사진의 색만 쓴다. 4×2칸으로 줄여 평균 색을 얻고, 그대로 늘려 흐리면
+// 얼굴·머리 모양 없이 그 사진 분위기의 부드러운 그라데이션이 된다.
 const bannerCache = new Map();
-function blurredBanner(url) {
+export function colorBanner(url) {
     if (!url) return Promise.resolve(null);
     if (!bannerCache.has(url))
         bannerCache.set(url, (async () => {
             try {
                 const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
                 if (!res.ok) return null;
-                const out = await sharp(Buffer.from(await res.arrayBuffer()), { animated: false })
-                    .resize(CARD_W / 2, 80, { fit: 'cover', position: 'centre' })
-                    .blur(12)
-                    .modulate({ saturation: 1.45, brightness: 1.03 })
-                    .resize(CARD_W, 160)
-                    .jpeg({ quality: 82 })
+                const grid = await sharp(Buffer.from(await res.arrayBuffer()), { animated: false })
+                    .resize(4, 2, { fit: 'cover', position: 'centre' })
+                    .modulate({ saturation: 1.3, brightness: 1.05 })
+                    .removeAlpha()
+                    .raw()
+                    .toBuffer();
+                const out = await sharp(grid, { raw: { width: 4, height: 2, channels: 3 } })
+                    .resize(CARD_W, 160, { kernel: 'cubic' })
+                    .blur(28)
+                    .jpeg({ quality: 88 })
                     .toBuffer();
                 return `data:image/jpeg;base64,${out.toString('base64')}`;
             } catch {
@@ -123,7 +128,7 @@ const hero = (banner, content) =>
         'div',
         { position: 'relative', overflow: 'hidden', color: '#fff' },
         banner && img(banner, CARD_W, 160, { position: 'absolute', left: 0, top: '50%', marginTop: -80, objectFit: 'cover' }),
-        h('div', { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundImage: banner ? 'linear-gradient(180deg, rgba(20,20,24,0.06), rgba(20,20,24,0.42))' : 'linear-gradient(135deg, #3f3f46, #18181b)' }),
+        h('div', { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundImage: banner ? 'linear-gradient(180deg, rgba(20,20,24,0.04), rgba(20,20,24,0.3))' : 'linear-gradient(135deg, #3f3f46, #18181b)' }),
         h('div', { position: 'relative', flex: 1 }, content)
     );
 
@@ -159,7 +164,7 @@ export async function renderNotice({ name, soopId, post, lines = 3 }) {
     const photosAll = (post?.photos || []).map(p => p?.url).filter(Boolean);
     const [avatar, banner, ...photos] = await Promise.all([
         fetchImage(avatarUrl(soopId, post), 160),
-        blurredBanner(avatarUrl(soopId, post)),
+        colorBanner(avatarUrl(soopId, post)),
         ...photosAll.slice(0, featured ? 4 : 1).map(u => fetchImage(u, 264)),
     ]);
     const shown = photos.filter(Boolean);
@@ -205,7 +210,7 @@ export async function renderNotice({ name, soopId, post, lines = 3 }) {
 const mmdd = date => `${Number(date.slice(5, 7))}.${Number(date.slice(8, 10))}`;
 
 export async function renderSchedule({ name, soopId, days, today, footer }) {
-    const [avatar, banner] = await Promise.all([fetchImage(avatarUrl(soopId), 160), blurredBanner(avatarUrl(soopId))]);
+    const [avatar, banner] = await Promise.all([fetchImage(avatarUrl(soopId), 160), colorBanner(avatarUrl(soopId))]);
     const head = hero(
         banner,
         h('div', { flex: 1, alignItems: 'center', gap: 14, padding: '24px 26px 22px' },
