@@ -56,6 +56,8 @@ details { background: #fff; border: 1px solid var(--line); border-radius: 16px; 
 summary { font-weight: 700; cursor: pointer; }
 details input { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; margin: 8px 0; }
 details ol { padding-left: 18px; margin: 8px 0; }
+details textarea { width: 100%; min-height: 84px; border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; margin: 8px 0; font: 12px ui-monospace, monospace; resize: vertical; }
+.cookie-msg { font-size: 13px; margin: 6px 0 0; } .cookie-msg.err { color: var(--red); } .cookie-msg.ok { color: var(--green); }
 </style>
 </head>
 <body>
@@ -87,6 +89,18 @@ details ol { padding-left: 18px; margin: 8px 0; }
       </ol>
       <input id="token" type="password" placeholder="github_pat_…" autocomplete="off">
       <button class="btn" id="forget" type="button">이 브라우저에서 토큰 지우기</button>
+    </details>
+    <details id="cookieBox" hidden>
+      <summary>SOOP 쿠키 바꾸기(즐겨찾기 글용)</summary>
+      <ol class="hint">
+        <li>PC 크롬에서 SOOP에 로그인한 채로 <a href="https://www.sooplive.co.kr/station/soju2022/board" target="_blank" rel="noopener">소주양 게시판</a>을 열기</li>
+        <li>F12 → Network → 새로고침 → 이름에 <b>board</b>가 들어간 요청 → Headers → Request Headers의 <b>cookie</b> 값 전체 복사</li>
+        <li>아래에 붙여 넣고 저장(위 "저장 권한"의 GitHub 토큰을 씁니다)</li>
+      </ol>
+      <p class="hint">저장하면 서버가 SOOP에서 먹히는지 먼저 확인하고, 암호화해서 저장소에 올립니다(저장소에는 암호문만). 1~2분 뒤 적용돼요.</p>
+      <textarea id="cookieInput" placeholder="AbroadChk=OK; …" autocomplete="off" spellcheck="false"></textarea>
+      <button class="btn primary" id="cookieSave" type="button">쿠키 저장</button>
+      <div class="cookie-msg" id="cookieMsg"></div>
     </details>
   </section>
   <aside>
@@ -310,14 +324,17 @@ load();
 
 // SOOP 쿠키 상태(Vercel에서만 있음, GitHub Pages 판에서는 조용히 넘어간다)
 const COOKIE_TEXT = {
-    error: '⚠️ SOOP 쿠키가 만료됐거나 잘못됐어요. 즐겨찾기 전용 글이 뱃지에 안 나와요. 새 쿠키를 Vercel 환경 변수 SOOP_COOKIE에 넣고 Redeploy 해 주세요.',
-    stale: '⚠️ 즐겨찾기 전용 글이 하나도 안 보여요. SOOP 쿠키가 만료됐을 수 있어요. 새 쿠키를 Vercel 환경 변수 SOOP_COOKIE에 넣고 Redeploy 해 주세요.',
-    none: '⚠️ SOOP 쿠키가 없어요. 공개 글만 나와요.',
+    error: '⚠️ SOOP 쿠키가 만료됐거나 잘못됐어요. 즐겨찾기 전용 글이 뱃지에 안 나와요. 아래 "SOOP 쿠키 바꾸기"에서 새 쿠키를 넣어 주세요.',
+    stale: '⚠️ 즐겨찾기 전용 글이 하나도 안 보여요. SOOP 쿠키가 만료됐을 수 있어요. 아래 "SOOP 쿠키 바꾸기"에서 새 쿠키를 넣어 주세요.',
+    none: '⚠️ SOOP 쿠키가 없어요. 공개 글만 나와요. 아래 "SOOP 쿠키 바꾸기"에서 넣을 수 있어요.',
 };
 fetch('../status.json', { cache: 'no-store' })
     .then(r => (r.ok ? r.json() : null))
     .then(st => {
-        if (!st || !st.state || st.state === 'unknown') return;
+        if (!st || !st.state) return;
+        $('cookieBox').hidden = false; // Vercel 판에서만 쿠키를 바꿀 수 있다
+        if (st.state !== 'ok') $('cookieBox').open = true;
+        if (st.state === 'unknown') return;
         const box = $('cookie');
         box.hidden = false;
         if (st.state === 'ok') {
@@ -329,6 +346,40 @@ fetch('../status.json', { cache: 'no-store' })
         }
     })
     .catch(() => {});
+
+const COOKIE_FILE_API = `https://api.github.com/repos/${REPO}/contents/cookie.enc`;
+$('cookieSave').addEventListener('click', async () => {
+    const msg = (text, cls = '') => { $('cookieMsg').textContent = text; $('cookieMsg').className = `cookie-msg ${cls}`; };
+    if (!store.get()) return msg('위 "저장 권한"에 GitHub 토큰을 먼저 넣어 주세요.', 'err');
+    const cookie = $('cookieInput').value.trim();
+    if (!cookie) return msg('쿠키를 붙여 넣어 주세요.', 'err');
+    $('cookieSave').disabled = true;
+    try {
+        msg('SOOP에서 이 쿠키가 먹는지 확인하는 중…');
+        const res = await fetch('../api/cookie', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cookie }) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `서버 ${res.status}`);
+        msg('암호화해서 저장소에 올리는 중…');
+        const head = await fetch(`${COOKIE_FILE_API}?ref=main&t=${Date.now()}`, { headers: { Accept: 'application/vnd.github+json', ...authHeaders() }, cache: 'no-store' });
+        const sha = head.ok ? (await head.json()).sha : undefined;
+        const put = await fetch(COOKIE_FILE_API, {
+            method: 'PUT',
+            headers: { Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', ...authHeaders() },
+            body: JSON.stringify({ message: 'SOOP 쿠키 바꿈(편집 화면, 암호문)', content: toB64(data.enc), sha, branch: 'main' }),
+        });
+        if (put.status === 401) throw new Error('GitHub 토큰이 맞지 않거나 만료됐습니다');
+        if (put.status === 403 || put.status === 404) throw new Error('GitHub 토큰에 ststats/badges의 Contents 쓰기 권한이 없습니다');
+        if (!put.ok) throw new Error(`GitHub ${put.status}`);
+        $('cookieInput').value = '';
+        msg(data.extraCount
+            ? `저장했어요. 즐겨찾기 전용 글 ${data.extraCount}개가 보이는 쿠키예요. 1~2분 뒤 뱃지에 적용돼요.`
+            : '저장했어요. 다만 이 쿠키로도 즐겨찾기 전용 글이 안 보여요(로그인이 풀린 쿠키일 수 있어요). 1~2분 뒤 적용돼요.', data.extraCount ? 'ok' : 'err');
+    } catch (e) {
+        msg(`저장하지 못했어요: ${e.message}`, 'err');
+    } finally {
+        $('cookieSave').disabled = false;
+    }
+});
 </script>
 </body>
 </html>

@@ -15,9 +15,9 @@ export default async function handler(req, res) {
         extraCount = extra.length;
         state = !hasCookie ? 'none' : error ? 'error' : extra.length ? 'ok' : 'stale';
         status = !hasCookie
-            ? '쿠키 없음: 공개 글만 나옵니다. 즐겨찾기 글까지 넣으려면 Vercel 환경 변수 SOOP_COOKIE를 넣고 Redeploy 하세요.'
+            ? '쿠키 없음: 공개 글만 나옵니다. 즐겨찾기 글까지 넣으려면 편집 화면(/edit/)의 "SOOP 쿠키 바꾸기"에서 넣으세요.'
             : error
-              ? `⚠️ 쿠키로 게시판을 읽지 못했습니다(${escapeHTML(error)}). 만료됐거나 잘못 복사된 것 같습니다. 새 쿠키를 넣고 Redeploy 하세요. 지금은 공개 글만 나옵니다.`
+              ? `⚠️ 쿠키로 게시판을 읽지 못했습니다(${escapeHTML(error)}). 만료됐거나 잘못 복사된 것 같습니다. 편집 화면(/edit/)의 "SOOP 쿠키 바꾸기"에서 새 쿠키를 넣으세요. 지금은 공개 글만 나옵니다.`
               : extra.length
                 ? `✅ 쿠키로 즐겨찾기 전용 글까지 받고 있습니다. 최근 글 중 공개 목록에 없는 글 ${extra.length}개.`
                 : '쿠키는 들어 있지만 최근 글 20개 중 즐겨찾기 전용 글이 없습니다(지금 없거나, 쿠키가 로그인 상태가 아닐 수 있습니다).';

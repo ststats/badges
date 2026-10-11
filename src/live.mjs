@@ -1,4 +1,5 @@
 // Vercel 함수가 쓰는 데이터: SOOP 게시판(30초 기억)과 배포에 같이 들어간 schedule.txt
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,11 +31,52 @@ async function fetchBoardFrom(host, cookie) {
     return recentOwnPosts(board, config.soopId, 20);
 }
 
+// 쿠키는 편집 화면이 커밋한 cookie.enc(COOKIE_KEY로 암호화)를 먼저 쓰고, 없으면 환경 변수 SOOP_COOKIE.
+// 저장소는 공개라 암호문만 두고, 열쇠(COOKIE_KEY)는 Vercel 환경 변수에만 있다.
+const cookieCipherKey = () => crypto.createHash('sha256').update(process.env.COOKIE_KEY || '').digest();
+
+export function encryptCookie(cookie) {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', cookieCipherKey(), iv);
+    const body = Buffer.concat([cipher.update(cookie, 'utf8'), cipher.final()]);
+    return Buffer.concat([iv, cipher.getAuthTag(), body]).toString('base64') + '\n';
+}
+
+export function decryptCookie(text) {
+    const raw = Buffer.from(text.trim(), 'base64');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', cookieCipherKey(), raw.subarray(0, 12));
+    decipher.setAuthTag(raw.subarray(12, 28));
+    return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString('utf8');
+}
+
+let cookiePromise = null;
+export const cookieKeyReady = () => (process.env.COOKIE_KEY || '').length >= 16;
+function currentCookie() {
+    return (cookiePromise ||= (async () => {
+        if (cookieKeyReady()) {
+            try {
+                return { cookie: decryptCookie(await fs.readFile(path.join(root, 'cookie.enc'), 'utf-8')), source: 'edit' };
+            } catch (e) {
+                if (e.code !== 'ENOENT') console.error('cookie.enc를 풀지 못했습니다(COOKIE_KEY가 바뀌었나요?):', e.message);
+            }
+        }
+        return { cookie: process.env.SOOP_COOKIE || '', source: process.env.SOOP_COOKIE ? 'env' : 'none' };
+    })());
+}
+
+// 편집 화면이 새 쿠키를 저장하기 전에 SOOP이 받아 주는지 본다. 공개 목록에 없는 글 수를 돌려준다.
+export async function checkCookie(cookie) {
+    const [mine, pub] = await Promise.all([fetchBoard(cookie), fetchBoard('')]);
+    const pubIds = new Set(pub.map(p => p.titleNo));
+    return mine.filter(p => !pubIds.has(p.titleNo)).length;
+}
+
 let lastCookieError = '';
 let boardCache = { at: 0, request: null };
-function cachedBoard() {
+async function cachedBoard() {
     if (boardCache.request && Date.now() - boardCache.at < 30000) return boardCache.request;
-    const cookie = process.env.SOOP_COOKIE || '';
+    const { cookie } = await currentCookie();
+    if (boardCache.request && Date.now() - boardCache.at < 30000) return boardCache.request;
     const request = cookie
         ? fetchBoard(cookie).then(
               posts => ((lastCookieError = ''), posts),
@@ -57,7 +99,8 @@ export const recentPosts = () => cachedBoard().then(posts => posts.slice(0, conf
 export async function cookieStatus() {
     const [mine, pub] = await Promise.all([cachedBoard(), fetchBoard('')]);
     const pubIds = new Set(pub.map(p => p.titleNo));
-    return { hasCookie: !!process.env.SOOP_COOKIE, error: lastCookieError, extra: mine.filter(p => !pubIds.has(p.titleNo)) };
+    const { source } = await currentCookie();
+    return { hasCookie: source !== 'none', source, error: lastCookieError, extra: mine.filter(p => !pubIds.has(p.titleNo)) };
 }
 
 // 편집 화면에서 저장하면 커밋 → Vercel이 다시 배포하므로 파일만 읽으면 된다

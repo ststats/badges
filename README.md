@@ -34,14 +34,16 @@
 
 ## 즐겨찾기 전용 글까지 넣기(선택)
 
-Vercel → Project → Settings → **Environment Variables**에 `SOOP_COOKIE`(본인 SOOP 로그인 쿠키)를 넣고 **Redeploy**하면
-뱃지에 즐겨찾기 전용 글도 나옵니다. **뱃지 주소를 아는 사람은 누구나 그 글을 보게 되니** 커뮤니티 등에 올릴 때는 쿠키를 빼세요.
+본인 SOOP 로그인 쿠키로 게시판을 읽으면 뱃지에 즐겨찾기 전용 글도 나옵니다.
+**뱃지 주소를 아는 사람은 누구나 그 글을 보게 되니** 커뮤니티 등에 올릴 때는 쿠키를 빼세요.
 
-- 쿠키 얻기: PC 크롬에서 로그인한 채로 `https://www.sooplive.co.kr/station/soju2022/board`를 열고
-  F12 → Network → 새로고침 → 이름에 `board`가 들어간 요청 → Headers → Request Headers의 **cookie** 값 전체를 복사.
-- 저장소·채팅에 붙이지 말고 Vercel 환경 변수에만 넣으세요. 새어 나갔다 싶으면 SOOP에서 로그아웃하면 무효가 됩니다.
-- `https://<vercel 주소>/status`에서 쿠키가 먹는지(✅/⚠️)와 지금 뱃지에 들어가는 글을 볼 수 있습니다.
-  만료되거나 잘못되면 공개 글로 대신하고 ⚠️가 뜹니다(새 쿠키를 넣고 Redeploy).
+- **처음 한 번:** Vercel → Settings → Environment Variables에 `COOKIE_KEY`(16자 이상 아무 긴 문자열)를 넣고 Redeploy.
+- **쿠키 넣기·바꾸기:** 편집 화면(`/edit/`)의 **SOOP 쿠키 바꾸기**에 붙여 넣고 저장. 서버가 SOOP에서 먹히는지 먼저 보고,
+  `COOKIE_KEY`로 암호화한 `cookie.enc`를 편집 화면이 커밋합니다(저장소에는 암호문만, 1~2분 뒤 적용).
+  쿠키 얻기: PC 크롬에서 로그인한 채로 소주양 게시판 → F12 → Network → 새로고침 → `board` 요청 → Request Headers의 **cookie** 값 전체.
+- 편집 화면 맨 위에 쿠키 상태가 나오고, 만료가 의심되면(즐겨찾기 글이 하나도 안 보이면) 빨간 알림이 뜹니다.
+  `/status`에서 자세히 볼 수 있습니다.
+- `cookie.enc`가 없거나 풀리지 않으면 환경 변수 `SOOP_COOKIE`를 씁니다. 쿠키가 새어 나갔다 싶으면 SOOP에서 로그아웃하면 무효가 됩니다.
 
 ## 일정 적기
 

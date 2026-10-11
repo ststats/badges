@@ -6,10 +6,11 @@ import { fileURLToPath } from 'node:url';
 import img from '../api/img.js';
 import go from '../api/go.js';
 import status from '../api/status.js';
+import cookie from '../api/cookie.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const vercel = JSON.parse(await fs.readFile(path.join(root, 'vercel.json'), 'utf-8'));
-const handlers = { '/api/img': img, '/api/go': go, '/api/status': status };
+const handlers = { '/api/img': img, '/api/go': go, '/api/status': status, '/api/cookie': cookie };
 const toRegex = src =>
     new RegExp('^' + src.replace(/[.]/g, '\\.').replace(/:(\w+)\(([^)]+)\)/g, '(?<$1>$2)').replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$');
 const types = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript', '.json': 'application/json' };
@@ -24,6 +25,7 @@ http.createServer(async (req, res) => {
         req.url = dest.pathname + dest.search;
         return handlers[dest.pathname](req, res);
     }
+    if (handlers[url.pathname]) return handlers[url.pathname](req, res);
     let file = path.join(root, 'public', decodeURIComponent(url.pathname));
     if (!file.startsWith(path.join(root, 'public'))) return res.writeHead(403).end();
     try {
