@@ -10,6 +10,38 @@
     },
     "rewrites": [
         {
+            "source": "/p/:p/notice-:i(\\d).:v([0-9a-f]{12}).png",
+            "destination": "/api/img?kind=notice&i=:i&v=:v&p=:p"
+        },
+        {
+            "source": "/p/:p/notice-:i(\\d).png",
+            "destination": "/api/img?kind=notice&i=:i&p=:p"
+        },
+        {
+            "source": "/p/:p/schedule.:v([0-9a-f]{12}).png",
+            "destination": "/api/img?kind=schedule&v=:v&p=:p"
+        },
+        {
+            "source": "/p/:p/schedule.png",
+            "destination": "/api/img?kind=schedule&p=:p"
+        },
+        {
+            "source": "/p/:p/n/:i(\\d)",
+            "destination": "/api/go?i=:i&p=:p"
+        },
+        {
+            "source": "/p/:p/n/:i(\\d)/",
+            "destination": "/api/go?i=:i&p=:p"
+        },
+        {
+            "source": "/p/:p",
+            "destination": "/api/private?p=:p"
+        },
+        {
+            "source": "/p/:p/",
+            "destination": "/api/private?p=:p"
+        },
+        {
             "source": "/notice-:i(\\d).:v([0-9a-f]{12}).png",
             "destination": "/api/img?kind=notice&i=:i&v=:v"
         },

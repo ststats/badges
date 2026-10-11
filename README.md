@@ -32,6 +32,21 @@
 3. 주소를 바꾸려면 Project Settings → Domains(예: `sojuyang-badges.vercel.app`)
 4. 그 주소 첫 화면의 코드를 커뮤니티 글에 붙여 넣기
 
+## 비밀 판(즐겨찾기 전용 글 포함, 본인만)
+
+본인 SOOP 로그인 쿠키로 게시판을 읽어 즐겨찾기 전용 글까지 넣은 판입니다. **커뮤니티에 넣지 말고** 본인만 북마크해서 봅니다.
+주소는 `https://<vercel 주소>/p/<비밀키>/`(상태 화면 + 뱃지), 이미지·링크는 그 아래 `notice-1.png`, `n/1` 등.
+비밀키가 틀리면 404. 공개 판(`/notice-1.png` 등)은 그대로 공개 글만 나옵니다.
+
+Vercel → Project → Settings → **Environment Variables**에 두 개를 넣고 **Redeploy**:
+
+- `PRIVATE_KEY`: 16자 이상 아무 긴 문자열(예: `openssl rand -hex 16`). 이게 주소의 비밀키입니다.
+- `SOOP_COOKIE`: 본인 로그인 쿠키. PC 크롬에서 로그인한 채로 `https://www.sooplive.co.kr/station/soju2022/board`를 열고
+  F12 → Network → 새로고침 → 이름에 `board`가 들어간 요청 → Headers → Request Headers의 **cookie** 값 전체를 복사.
+
+쿠키는 저장소·채팅에 붙이지 말고 Vercel 환경 변수에만 넣으세요. 만료되거나 잘못되면 상태 화면에 ⚠️가 뜨고
+공개 글만 나옵니다(새 쿠키를 넣고 Redeploy). 쿠키가 새어 나갔다 싶으면 SOOP에서 로그아웃하면 무효가 됩니다.
+
 ## 일정 적기
 
 **편집 화면: `<vercel 주소>/edit/`** (휴대폰에서도 됩니다. `https://ststats.github.io/badges/edit/`도 같은 화면)

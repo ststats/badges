@@ -1,10 +1,10 @@
-// /notice-1.png ~ /notice-3.png, /schedule.png (vercel.json이 여기로 보낸다)
+// /notice-1.png ~ /notice-3.png, /schedule.png (비밀 판은 /p/<키>/notice-1.png …, vercel.json이 여기로 보낸다)
 // 그리는 데 CPU가 들어서(Vercel 무료 한도: 월 4시간) 내용이 바뀔 때만 그린다.
 //   /notice-1.png            → 지금 내용의 해시를 붙인 /notice-1.<해시>.png로 보낸다(CDN 1분, CPU 거의 안 씀)
 //   /notice-1.<해시>.png     → 한 번 그리고 CDN이 계속 쓴다(내용이 바뀌면 해시가 바뀌므로 오래 둬도 된다)
 import crypto from 'node:crypto';
 import { kstToday, parseSchedule, weekSchedule } from '../src/lib.mjs';
-import { config, query, recentPosts, scheduleText } from '../src/live.mjs';
+import { access, config, notFound, query, recentPosts, scheduleText } from '../src/live.mjs';
 import { renderNotice, renderSchedule } from '../src/render.mjs';
 
 // 배포(코드)가 바뀌면 그림도 새로
@@ -21,7 +21,7 @@ const slimPost = p =>
         photos: (p.photos || []).map(x => ({ url: x?.url })),
     };
 
-async function badge(q) {
+async function badge(q, priv) {
     if (q.get('kind') === 'schedule') {
         const now = Date.now();
         const args = {
@@ -31,20 +31,23 @@ async function badge(q) {
         return { base: 'schedule', args, render: () => renderSchedule(args) };
     }
     const i = Math.min(Math.max(Number(q.get('i')) || 1, 1), config.noticeCount) - 1;
-    const args = { name: config.name, soopId: config.soopId, post: slimPost((await recentPosts())[i]), lines: config.noticeLines?.[i] };
+    const args = { name: config.name, soopId: config.soopId, post: slimPost((await recentPosts(priv))[i]), lines: config.noticeLines?.[i] };
     return { base: `notice-${i + 1}`, args, render: () => renderNotice(args) };
 }
 
 export default async function handler(req, res) {
     const q = query(req);
+    const who = access(q);
+    if (!who) return notFound(res);
+    if (who.priv) res.setHeader('X-Robots-Tag', 'noindex');
     try {
-        const { base, args, render } = await badge(q);
+        const { base, args, render } = await badge(q, who.priv);
         const key = crypto.createHash('sha256').update(BUILD + JSON.stringify(args)).digest('hex').slice(0, 12);
         const v = q.get('v');
         if (v !== key) {
             // 고정 주소이거나 지난 해시: 지금 그림으로 보낸다
             res.statusCode = 302;
-            res.setHeader('Location', `/${base}.${key}.png`);
+            res.setHeader('Location', `${who.prefix}${base}.${key}.png`);
             res.setHeader('Cache-Control', v ? 'public, max-age=0, s-maxage=10' : 'public, max-age=60, s-maxage=60');
             return res.end();
         }
