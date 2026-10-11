@@ -1,11 +1,11 @@
-// SOOP 게시판·스타유니브 일정을 받아 뱃지 PNG와 원글 이동 페이지를 dist/에 만든다.
+// SOOP 게시판과 schedule.txt로 뱃지 PNG와 원글 이동 페이지를 dist/에 만든다.
 // 하나라도 못 받으면 실패로 끝나 배포하지 않는다(이전에 배포된 뱃지가 그대로 남는다).
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
 import {
-    boardUrl, escapeHTML, kstStamp, kstToday, noticeBadgeHtml, postUrl, recentOwnPosts, redirectHtml,
+    boardUrl, escapeHTML, kstStamp, kstToday, noticeBadgeHtml, parseSchedule, postUrl, recentOwnPosts, redirectHtml,
     scheduleBadgeHtml, weekSchedule,
 } from '../src/lib.mjs';
 
@@ -29,18 +29,15 @@ async function getJson(url, headers = {}) {
 }
 
 const { soopId, name, noticeCount } = config;
-const [board, schedule] = await Promise.all([
-    getJson(`https://api-channel.sooplive.com/v1.1/channel/${encodeURIComponent(soopId)}/board?perPage=20&page=1`),
-    getJson(`${config.supabase.url}/rest/v1/rpc/api_schedule`, {
-        apikey: config.supabase.key,
-        Authorization: `Bearer ${config.supabase.key}`,
-    }),
-]);
+const board = await getJson(`https://api-channel.sooplive.com/v1.1/channel/${encodeURIComponent(soopId)}/board?perPage=20&page=1`);
 if (!Array.isArray(board?.contents)) throw new Error('SOOP 게시판 응답 형식이 바뀌었습니다');
-if (!Array.isArray(schedule?.events)) throw new Error('일정 응답 형식이 바뀌었습니다');
+
+// 못 읽은 줄은 빼고 만든다. Actions 실행 화면에 노란 경고로 남는다.
+const schedule = parseSchedule(await fs.readFile(path.join(root, 'schedule.txt'), 'utf-8'), now);
+schedule.errors.forEach(e => console.log(`::warning file=schedule.txt::${e}`));
 
 const posts = recentOwnPosts(board, soopId, noticeCount);
-const days = weekSchedule(schedule, now, { soopId, ...config.schedule });
+const days = weekSchedule(schedule, now);
 
 const badges = [
     ...Array.from({ length: noticeCount }, (_, i) => ({
@@ -52,7 +49,7 @@ const badges = [
     })),
     {
         file: 'schedule.png',
-        html: scheduleBadgeHtml({ name, days, today: kstToday(now), updatedAt: kstStamp(now) }),
+        html: scheduleBadgeHtml({ name, days, today: kstToday(now), footer: config.schedule.footer }),
         linkPath: 's/',
         target: config.schedule.link,
         label: '주간 일정',

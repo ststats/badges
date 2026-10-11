@@ -1,8 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isMyEvent, recentOwnPosts, redirectHtml, weekDates, weekSchedule } from '../src/lib.mjs';
-
-const match = { personKeywords: ['주양', '쏘', '소주'], teamNames: ['캄몬'] };
+import { parseSchedule, recentOwnPosts, redirectHtml, weekDates, weekSchedule } from '../src/lib.mjs';
 
 test('이번 주는 한국 시간 월요일부터', () => {
     // 2026-10-11 15:30 UTC = 10-12(월) 00:30 KST
@@ -13,33 +11,23 @@ test('이번 주는 한국 시간 월요일부터', () => {
     assert.equal(weekDates(Date.parse('2026-10-11T05:00:00Z'))[0], '2026-10-05');
 });
 
-test('일정 담당자 줄임말과 팀 일정을 찾는다', () => {
-    assert.ok(isMyEvent({ person: '쏘랑밍송' }, match));
-    assert.ok(isMyEvent({ person: '주양두두송이' }, match));
-    assert.ok(isMyEvent({ person: '캄몬', description: '점호' }, match));
-    assert.ok(isMyEvent({ person: '두두', description: '주양CK' }, match));
-    assert.ok(!isMyEvent({ person: '캄몬컵' }, match));
-    assert.ok(!isMyEvent({ person: '윤환햇살두두', description: '클암CK' }, match));
+test('schedule.txt 읽기: 시간 생략·휴방·주석·잘못된 줄', () => {
+    const now = Date.parse('2026-10-08T03:00:00Z');
+    const { events, offAir, errors } = parseSchedule(
+        ['# 주석', '', '10.6 시간미정 늦은', '10.6 9:00 이른', '2026-10-06 20:00 캄몬 VS 드림즈', '10.9 휴방', '10.10 20:00', '13.40 이상', '10.7 그냥'].join('\n'),
+        now
+    );
+    const days = weekSchedule({ events, offAir }, now);
+    assert.deepEqual(days[1].events.map(e => [e.time, e.text]), [['9:00', '이른'], ['20:00', '캄몬 VS 드림즈'], ['시간미정', '늦은']]);
+    assert.deepEqual(days[2].events.map(e => [e.time, e.text]), [['', '그냥']]);
+    assert.deepEqual(days.map(d => d.offAir), [false, false, false, false, true, false, false]);
+    assert.equal(errors.length, 2);
 });
 
-test('주간 일정: 여러 날 일정·휴방·시간순', () => {
-    const now = Date.parse('2026-10-08T03:00:00Z');
-    const days = weekSchedule(
-        {
-            events: [
-                { person: '캄몬', description: '늦은', start_date: '2026-10-06', event_time: '시간미정' },
-                { person: '쏘', description: '이른', start_date: '2026-10-06', event_time: '9:00' },
-                { person: '주양', description: '긴', start_date: '2026-10-04', end_date: '2026-10-06', event_time: '20:00' },
-                { person: '마토', description: '남', start_date: '2026-10-06', event_time: '10:00' },
-            ],
-            offAir: [{ off_date: '2026-10-09', soop_id: 'soju2022' }, { off_date: '2026-10-10', soop_id: 'other' }],
-        },
-        now,
-        { soopId: 'soju2022', ...match }
-    );
-    assert.deepEqual(days[0].events.map(e => e.description), ['긴']);
-    assert.deepEqual(days[1].events.map(e => e.description), ['이른', '긴', '늦은']);
-    assert.deepEqual(days.map(d => d.offAir), [false, false, false, false, true, false, false]);
+test('연도 없는 날짜는 가까운 해', () => {
+    const dec = Date.parse('2026-12-28T03:00:00Z');
+    assert.equal(parseSchedule('1.2 신년', dec).events[0].date, '2027-01-02');
+    assert.equal(parseSchedule('12.30 연말', dec).events[0].date, '2026-12-30');
 });
 
 test('최근 글: 본인 글만, 고정 공지와 겹치면 한 번, 최신순', () => {

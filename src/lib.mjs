@@ -36,26 +36,59 @@ export function weekDates(nowMs) {
 
 export const kstToday = nowMs => new Date(nowMs + KST_OFFSET_MS).toISOString().slice(0, 10);
 
-// 일정의 person은 '쏘랑밍송'처럼 줄임말을 붙여 쓰므로 글자 포함으로 찾는다. 팀 이름은 정확히 같을 때만.
-export function isMyEvent(ev, { personKeywords = [], teamNames = [] }) {
-    const person = String(ev.person || '').trim();
-    if (teamNames.includes(person)) return true;
-    const text = `${person} ${ev.description || ''}`;
-    return personKeywords.some(k => k && text.includes(k));
+const TIME_RE = /^(\d{1,2}):(\d{2})$/;
+const timeKey = t => (TIME_RE.test(t || '') ? t.padStart(5, '0') : '99:99');
+
+// '10.13'처럼 연도 없는 날짜는 오늘과 가장 가까운 해로 본다(12월에 1월 일정을 적어도 맞게)
+function resolveDate(token, nowMs) {
+    let m = /^(\d{4})[-.](\d{1,2})[-.](\d{1,2})$/.exec(token);
+    const pad = n => String(n).padStart(2, '0');
+    const valid = (y, mo, d) => {
+        const iso = `${y}-${pad(mo)}-${pad(d)}`;
+        const ms = Date.parse(iso + 'T00:00:00Z');
+        return ms && new Date(ms).toISOString().slice(0, 10) === iso ? iso : null;
+    };
+    if (m) return valid(+m[1], +m[2], +m[3]);
+    m = /^(\d{1,2})[./](\d{1,2})$/.exec(token);
+    if (!m) return null;
+    const year = Number(kstToday(nowMs).slice(0, 4));
+    const today = Date.parse(kstToday(nowMs));
+    return [year - 1, year, year + 1]
+        .map(y => valid(y, +m[1], +m[2]))
+        .filter(Boolean)
+        .sort((a, b) => Math.abs(Date.parse(a) - today) - Math.abs(Date.parse(b) - today))[0] || null;
 }
 
-const timeKey = t => (/^\d{1,2}:\d{2}$/.test(t || '') ? t.padStart(5, '0') : '99:99');
+// schedule.txt: 한 줄에 '날짜 [시간] 내용'. 내용이 '휴방'이면 휴방일. #로 시작하는 줄과 빈 줄은 건너뛴다.
+export function parseSchedule(text, nowMs) {
+    const events = [];
+    const offAir = new Set();
+    const errors = [];
+    String(text || '')
+        .split(/\r?\n/)
+        .forEach((raw, i) => {
+            const line = raw.trim();
+            if (!line || line.startsWith('#')) return;
+            const [dateToken, ...rest] = line.split(/\s+/);
+            const date = resolveDate(dateToken, nowMs);
+            if (!date) return errors.push(`${i + 1}번째 줄 날짜를 읽지 못했습니다: ${line}`);
+            let time = '';
+            if (TIME_RE.test(rest[0]) || rest[0] === '시간미정') time = rest.shift();
+            const what = rest.join(' ');
+            if (!what) return errors.push(`${i + 1}번째 줄에 내용이 없습니다: ${line}`);
+            if (what === '휴방') offAir.add(date);
+            else events.push({ date, time, text: what, order: i });
+        });
+    return { events, offAir, errors };
+}
 
-export function weekSchedule(schedule, nowMs, { soopId, ...match }) {
-    const dates = weekDates(nowMs);
-    const mine = (schedule?.events || []).filter(ev => isMyEvent(ev, match));
-    const off = new Set((schedule?.offAir || []).filter(o => o.soop_id === soopId).map(o => o.off_date));
-    return dates.map(date => ({
+export function weekSchedule({ events, offAir }, nowMs) {
+    return weekDates(nowMs).map(date => ({
         date,
-        offAir: off.has(date),
-        events: mine
-            .filter(ev => ev.start_date <= date && (ev.end_date || ev.start_date) >= date)
-            .sort((a, b) => timeKey(a.event_time).localeCompare(timeKey(b.event_time))),
+        offAir: offAir.has(date),
+        events: events
+            .filter(ev => ev.date === date)
+            .sort((a, b) => timeKey(a.time).localeCompare(timeKey(b.time)) || a.order - b.order),
     }));
 }
 
@@ -138,32 +171,23 @@ const SCHEDULE_CSS = `
 .dh .dt { font-size: 12px; }
 .sun .wd { color: #e03131; } .sat .wd { color: #1971c2; }
 .today .dh .dt { color: #3b5bdb; font-weight: 700; }
-.ev { border-radius: 6px; padding: 5px 6px; margin-top: 5px; background: #fff; border-left: 3px solid var(--c, #3b5bdb); }
+.ev { border-radius: 6px; padding: 5px 6px; margin-top: 5px; background: #fff; border-left: 3px solid #3b5bdb; }
 .ev .t { font-size: 11px; font-weight: 700; color: #6b7487; }
 .ev .d { font-size: 12.5px; font-weight: 700; line-height: 1.3; word-break: keep-all; overflow-wrap: anywhere; margin-top: 1px; }
-.ev .p { font-size: 11px; color: #8a93a6; margin-top: 1px; word-break: keep-all; overflow-wrap: anywhere; }
 .offtag { display: inline-block; font-size: 11.5px; font-weight: 700; color: #868e96; background: #e9ecef; border-radius: 5px; padding: 3px 7px; margin-top: 4px; }
 .none { font-size: 12px; color: #c0c6d2; margin-top: 4px; }
 .foot { font-size: 11.5px; margin-top: 10px; text-align: right; }
 `;
 
-// 사이트 달력 색(calendar.js CAL_COLOR_PALETTE)과 비슷하게
-const EVENT_COLORS = {
-    red: '#f03e3e', orange: '#f76707', yellow: '#f59f00', green: '#37b24d',
-    blue: '#3b5bdb', indigo: '#4c6ef5', purple: '#ae3ec9', light_gray: '#adb5bd',
-};
-
-export function scheduleBadgeHtml({ name, days, today, updatedAt }) {
+export function scheduleBadgeHtml({ name, days, today, footer }) {
     const cells = days
         .map(({ date, offAir, events }) => {
             const wd = weekdayOf(date);
             const cls = ['day', date === today && 'today', offAir && 'off', wd === '일' && 'sun', wd === '토' && 'sat'].filter(Boolean).join(' ');
             const evs = events
                 .map(
-                    ev => `<div class="ev" style="--c:${EVENT_COLORS[ev.color] || EVENT_COLORS.blue}">
-                      <div class="t">${escapeHTML(ev.event_time || '')}</div>
-                      <div class="d">${escapeHTML(ev.description || ev.person || '')}</div>
-                      ${ev.person && ev.description ? `<div class="p">${escapeHTML(ev.person)}</div>` : ''}</div>`
+                    ev => `<div class="ev">${ev.time ? `<div class="t">${escapeHTML(ev.time)}</div>` : ''}
+                      <div class="d">${escapeHTML(ev.text)}</div></div>`
                 )
                 .join('');
             return `<div class="${cls}"><div class="dh"><span class="wd">${wd}</span><span class="dt muted">${mmdd(date)}</span></div>
@@ -176,7 +200,7 @@ export function scheduleBadgeHtml({ name, days, today, updatedAt }) {
         `<div id="badge"><div class="head"><h1>${escapeHTML(name)} 주간 일정</h1>
           <span class="range muted">${mmdd(days[0].date)} ~ ${mmdd(days[6].date)}</span></div>
           <div class="grid">${cells}</div>
-          <div class="foot muted">${escapeHTML(updatedAt)} 기준 · 클릭하면 전체 일정</div></div>`
+          <div class="foot muted">${escapeHTML(footer)}</div></div>`
     );
 }
 
