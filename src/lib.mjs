@@ -95,6 +95,30 @@ export function weekSchedule({ events, offAir }, nowMs) {
 const mmdd = date => `${Number(date.slice(5, 7))}.${Number(date.slice(8, 10))}`;
 const weekdayOf = date => WEEKDAYS[new Date(date + 'T00:00:00Z').getUTCDay()];
 
+// 편집 화면이 저장할 때 쓴다. 연도가 헷갈리지 않게 날짜는 늘 YYYY-MM-DD로 적는다.
+export function serializeSchedule({ events, offAir }, header = '') {
+    const lines = [
+        ...[...offAir].map(date => ({ date, order: -1, line: `${date} 휴방` })),
+        ...events.map((ev, i) => ({
+            date: ev.date,
+            order: i,
+            time: ev.time,
+            line: [ev.date, ev.time, String(ev.text).replace(/\s+/g, ' ').trim()].filter(Boolean).join(' '),
+        })),
+    ].sort((a, b) => a.date.localeCompare(b.date) || (a.order < 0 ? -1 : b.order < 0 ? 1 : timeKey(a.time).localeCompare(timeKey(b.time)) || a.order - b.order));
+    let out = header.trimEnd() ? header.trimEnd() + '\n\n' : '';
+    let last = '';
+    for (const l of lines) {
+        if (last && l.date.slice(0, 10) !== last) out += '\n';
+        out += l.line + '\n';
+        last = l.date;
+    }
+    return out;
+}
+
+// 편집 화면용: 한 주 앞뒤로 옮긴 날의 이번 주
+export const shiftWeek = (nowMs, weeks) => nowMs + weeks * 7 * DAY_MS;
+
 export function formatPostDate(regDate) {
     const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/.exec(regDate || '');
     return m ? `${Number(m[2])}.${Number(m[3])} (${weekdayOf(`${m[1]}-${m[2]}-${m[3]}`)}) ${m[4]}:${m[5]}` : '';

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSchedule, postText, recentOwnPosts, redirectHtml, weekDates, weekSchedule } from '../src/lib.mjs';
+import { parseSchedule, postText, serializeSchedule, recentOwnPosts, redirectHtml, weekDates, weekSchedule } from '../src/lib.mjs';
 
 test('이번 주는 한국 시간 월요일부터', () => {
     // 2026-10-11 15:30 UTC = 10-12(월) 00:30 KST
@@ -52,4 +52,13 @@ test('본문은 HTML에서 줄바꿈을 살려 뽑는다', () => {
     const post = { content: { textContent: '잘린 글 ...', content: '<p dpt=1>첫 줄&nbsp;&amp;</p><p></p><p></p><p>둘<br>셋 &#x1F600;</p>' } };
     assert.equal(postText(post), '첫 줄 &\n\n둘\n셋 \u{1F600}');
     assert.equal(postText({ content: { textContent: '가<br>나' } }), '가\n나');
+});
+
+test('편집 화면 저장 형식은 다시 읽어도 같다', () => {
+    const now = Date.parse('2026-10-08T03:00:00Z');
+    const parsed = parseSchedule('10.7 시간미정 늦은\n10.7 9:00 이른\n10.9 휴방\n10.6 내용  두 칸', now);
+    const text = serializeSchedule(parsed, '# 머리말');
+    assert.equal(text, '# 머리말\n\n2026-10-06 내용 두 칸\n\n2026-10-07 9:00 이른\n2026-10-07 시간미정 늦은\n\n2026-10-09 휴방\n');
+    const again = parseSchedule(text, now);
+    assert.deepEqual(weekSchedule(again, now), weekSchedule(parsed, now).map(d => ({ ...d, events: d.events.map((e, i) => ({ ...e, order: weekSchedule(again, now).find(x => x.date === d.date).events[i].order })) })));
 });

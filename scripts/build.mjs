@@ -102,13 +102,18 @@ await fs.writeFile(
 <style>body{font-family:system-ui,sans-serif;max-width:820px;margin:24px auto;padding:0 16px;color:#1c2230;background:#f5f6fa}
 section{background:#fff;border-radius:12px;padding:16px;margin:14px 0}h2{font-size:16px;margin:0 0 10px}
 img{max-width:100%}textarea{width:100%;height:64px;font:12px monospace;margin-top:8px}</style></head><body>
-<h1>${escapeHTML(name)} 뱃지</h1><p>${escapeHTML(kstStamp(now))} 갱신. 아래 코드를 커뮤니티 글(HTML 편집)에 붙이면 이미지를 누를 때 원글로 갑니다.</p>
+<h1>${escapeHTML(name)} 뱃지</h1><p>${escapeHTML(kstStamp(now))} 갱신. 아래 코드를 커뮤니티 글(HTML 편집)에 붙이면 이미지를 누를 때 원글로 갑니다. 일정은 <a href="edit/">편집 화면</a>에서 고칩니다.</p>
 ${badges
     .map(b => `<section><h2>${escapeHTML(b.label)}</h2>${embed(b)}<textarea readonly onclick="this.select()">${escapeHTML(embed(b))}</textarea></section>`)
     .join('\n')}
 </body></html>
 `
 );
+// 일정 편집 화면(edit/)은 뱃지와 같은 lib.mjs로 미리보기를 그린다
+await fs.mkdir(path.join(out, 'edit'), { recursive: true });
+await fs.copyFile(path.join(root, 'src/edit.html'), path.join(out, 'edit/index.html'));
+await fs.copyFile(path.join(root, 'src/lib.mjs'), path.join(out, 'lib.mjs'));
+await fs.copyFile(path.join(root, 'config.json'), path.join(out, 'config.json'));
 await fs.writeFile(path.join(out, '.nojekyll'), '');
 await fs.writeFile(path.join(out, 'state.txt'), state + '\n');
 console.log(`완료: 글 ${posts.length}개, 이번 주 일정 ${days.reduce((n, d) => n + d.events.length, 0)}개, 휴방 ${days.filter(d => d.offAir).length}일`);
