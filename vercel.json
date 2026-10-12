@@ -9,6 +9,12 @@
             "includeFiles": "{fonts/**,config.json}",
             "memory": 1024,
             "maxDuration": 20
+        },
+        "api/autopost-detect.js": {
+            "maxDuration": 60
+        },
+        "api/autopost-source.js": {
+            "maxDuration": 60
         }
     },
     "rewrites": [
