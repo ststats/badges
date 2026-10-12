@@ -1,17 +1,27 @@
 import { chromium } from 'playwright';
 import { config } from '../src/config.mjs';
-import { coolingDown, newPosts, postingCandidates, publishPosts } from '../src/autopost.mjs';
+import { coolingDown, newPosts, postingCandidates, publishPosts, recoverPending } from '../src/autopost.mjs';
 import { vercelPosts } from '../src/autopost-source.mjs';
 import { githubState } from '../src/autopost-state.mjs';
 import { ygosuPublisher } from '../src/ygosu-publisher.mjs';
 
 // 인증 정보/본문/스크린샷을 Actions 로그나 artifact로 남기지 않는다.
 async function main() {
+    if (process.env.DIAGNOSE_ONLY === 'true') {
+        const browser = await chromium.launch({ headless: true });
+        try {
+            const publisher = await ygosuPublisher(browser, { id: process.env.YGOSU_ID, password: process.env.YGOSU_PASSWORD, log: console.log });
+            try { console.log('읽기 전용 진단: ' + JSON.stringify(await publisher.diagnose())); }
+            finally { await publisher.close(); }
+        } finally { await browser.close(); }
+        return;
+    }
     console.log('등록 이력 확인');
     const store = await githubState({ repository: process.env.GITHUB_REPOSITORY, token: process.env.GITHUB_TOKEN });
     let state = store.state;
     let includeLatest = process.env.PUBLISH_LATEST === 'true';
-    if (state?.pending) newPosts(state, []);
+    const recovery = process.env.RECOVER_PENDING || '';
+    if (state?.pending && !recovery) newPosts(state, []);
     if (state && coolingDown(state)) { console.log('최근 등록 후 5분 이내: 이번 실행은 건너뜁니다'); return; }
     const started = Date.now();
     console.log('SOOP 공개/즐겨찾기 글 수집 및 접근 확인');
@@ -22,12 +32,19 @@ async function main() {
         console.log('초기 기준 저장 완료. 최신 공지 하나만 등록합니다.');
         includeLatest = true;
     }
-    if (!postingCandidates(state, posts, includeLatest).length) { console.log('등록할 공지 없음: 이미 등록한 최신 글은 재등록하지 않습니다'); return; }
+    if (!recovery && !postingCandidates(state, posts, includeLatest).length) { console.log('등록할 공지 없음: 이미 등록한 최신 글은 재등록하지 않습니다'); return; }
     const browser = await chromium.launch({ headless: true });
     try {
         console.log('와고 자동 로그인');
         const publisher = await ygosuPublisher(browser, { id: process.env.YGOSU_ID, password: process.env.YGOSU_PASSWORD, log: console.log });
         try {
+            if (recovery) {
+                console.log('미확정 한 건만 동일 멱등키로 복구');
+                await recoverPending({ state, id: recovery, posts, save: store.save,
+                    prepare: p => publisher.prepare(p), publish: (p, uploads) => publisher.publish(p, uploads) });
+                console.log('미확정 글 복구 완료');
+                return;
+            }
             const before = state.lastPostedAt;
             await publishPosts({ state, posts, save: store.save, includeLatest,
                 prepare: async p => { console.log('전체 공지 이미지 생성·업로드'); return publisher.prepare(p); },
@@ -57,6 +74,7 @@ main().catch(error => {
         ['YGOSU_ID와 YGOSU_PASSWORD', 'YGOSU_CREDENTIAL_MISSING'],
     ];
     const code = known.find(([fragment]) => String(error?.message).includes(fragment))?.[1]
+        || (/^YGOSU_WRITE_[A-Z0-9_]+$/.test(String(error?.message)) ? error.message : null)
         || (error?.name === 'TimeoutError' ? 'BROWSER_TIMEOUT' : 'UNCLASSIFIED');
     console.error(`오류 분류: ${code}`);
     // 라이브러리 오류가 요청 본문/쿠키를 포함할 수 있어 원본 stack/message를 출력하지 않는다.

@@ -83,6 +83,22 @@ export function articleBody(soopId, post, uploads) {
 
 export const coolingDown = (state, now = Date.now()) => Number.isFinite(state.lastPostedAt) && now - state.lastPostedAt < 5 * 60000;
 
+// 운영자가 번호를 지정한 복구만 허용한다. 자동 실행은 계속 pending에서 멈춘다.
+export async function recoverPending({ state, id, posts, prepare, publish, save, now = Date.now }) {
+    if (!/^\d+$/.test(id || '') || state?.pending?.id !== id) throw new Error('복구할 미확정 글 번호 불일치');
+    const age = now() - Date.parse(state.pending.at);
+    if (!Number.isFinite(age) || age < 0 || age > 60 * 60000) throw new Error('미확정 글 복구 시간 초과: 등록 결과 수동 확인 필요');
+    const post = posts.find(p => String(p.titleNo) === id);
+    if (!post) throw new Error('복구할 원문을 찾지 못했습니다');
+    const prepared = await prepare(post);
+    // pending을 지우거나 새 번호로 옮기지 않는다. publisher는 원문 번호로 같은 멱등키를 만든다.
+    const articleId = await publish(post, prepared);
+    state.done[id] = articleId;
+    state.lastPostedAt = now();
+    delete state.pending;
+    await save(state);
+}
+
 export async function publishPosts({ state, posts, save, prepare, publish, now = Date.now, includeLatest = false }) {
     const candidates = postingCandidates(state, posts, includeLatest);
     if (coolingDown(state, now()) || !candidates.length) return state;

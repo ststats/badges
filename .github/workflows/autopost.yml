@@ -3,6 +3,14 @@ name: 소주양 공지 자동 등록
 on:
   workflow_dispatch:
     inputs:
+      recover_pending:
+        description: '미확정 한 건 복구: 해당 SOOP 글 번호를 정확히 입력 (같은 멱등키 사용)'
+        type: string
+        default: ''
+      diagnose_only:
+        description: '글을 보내지 않고 로그인·글쓰기 인증만 확인'
+        type: boolean
+        default: false
       publish_latest:
         description: '최신 공지 하나 등록 테스트 (이미 등록한 글은 재등록하지 않음)'
         type: boolean
@@ -33,5 +41,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           PUBLISH_LATEST: ${{ inputs.publish_latest }}
+          DIAGNOSE_ONLY: ${{ inputs.diagnose_only }}
+          RECOVER_PENDING: ${{ inputs.recover_pending }}
           YGOSU_ID: ${{ secrets.YGOSU_ID }}
           YGOSU_PASSWORD: ${{ secrets.YGOSU_PASSWORD }}

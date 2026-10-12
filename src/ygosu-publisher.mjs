@@ -28,6 +28,22 @@ export async function ygosuPublisher(browser, { id, password, log = () => {} }) 
     if (login !== 'SUCCESS') { await context.close(); throw new Error('와고 자동 로그인 실패 또는 추가 인증 필요'); }
     return {
         close: () => context.close(),
+        async diagnose() {
+            await page.goto(`https://ygosu.com/board/${BOARD}/?mode=write`, { waitUntil: 'domcontentloaded' });
+            await page.waitForFunction(() => typeof YG_BOARD !== 'undefined' && typeof YG_COMMON !== 'undefined' && document.querySelector('form[name="writeform"]'));
+            return page.evaluate(async board => {
+                const form = document.querySelector('form[name="writeform"]');
+                const ctx = YG_BOARD.getV3ArticleWriteContext(form);
+                const token = String(new FormData(form).get('csrf_token') || '');
+                const restored = await YG_LOGIN_SESSION.restore();
+                return {
+                    writeContext: ctx?.boardCode === board && ctx?.mode === 'write',
+                    csrfPresent: token.length > 0,
+                    authenticated: restored.authenticated === true,
+                    refreshAccepted: ctx ? await YG_COMMON.refreshV3Authentication(ctx.csrfScope, token) : false,
+                };
+            }, BOARD);
+        },
         async prepare(post) {
             log('프로필 준비');
             const who = await profile({ soopId: config.soopId, theme: config.theme });
@@ -83,7 +99,8 @@ export async function ygosuPublisher(browser, { id, password, log = () => {} }) 
             const subject = articleSubject(post);
             const body = articleBody(config.soopId, post, uploads);
             const key = createHash('sha256').update(`soju:${BOARD}:${post.titleNo}`).digest('hex');
-            return page.evaluate(async ({ board, subject, body, codes, key, categoryCode }) => {
+            const outcome = await page.evaluate(async ({ board, subject, body, codes, key, categoryCode }) => {
+                try {
                 const form = document.querySelector('form[name="writeform"]');
                 const ctx = YG_BOARD.getV3ArticleWriteContext(form);
                 if (!ctx || ctx.boardCode !== board) throw new Error('와고 글쓰기 문맥 변경');
@@ -102,8 +119,29 @@ export async function ygosuPublisher(browser, { id, password, log = () => {} }) 
                 const result = await YG_BOARD.submitV3ArticleWrite(ctx, payload, String(data.get('csrf_token') || ''));
                 const article = result?.article;
                 if (article?.boardCode !== board || !Number.isSafeInteger(Number(article.articleId)) || Number(article.articleId) < 1) throw new Error('와고 등록 결과 확인 실패');
-                return Number(article.articleId);
+                return { articleId: Number(article.articleId) };
+                } catch (error) {
+                    const known = [
+                        ['로그인 상태를 다시', 'AUTH_REFRESH_FAILED'],
+                        ['첨부파일이 현재 작성', 'ATTACHMENT_SCOPE'],
+                        ['첨부파일의 로그인', 'ATTACHMENT_OWNER'],
+                        ['복사한 사진을 현재', 'ATTACHMENT_BODY_MISMATCH'],
+                        ['에디터에 포함된 사진', 'EDITOR_ATTACHMENT'],
+                        ['이메일 인증', 'EMAIL_VERIFICATION'],
+                        ['본인인증', 'IDENTITY_VERIFICATION'],
+                        ['이용 제한 상태', 'ACCOUNT_RESTRICTED'],
+                        ['작성 권한이 없습니다', 'BOARD_PERMISSION'],
+                        ['보안 확인 시간이', 'CSRF_EXPIRED'],
+                        ['등록 결과 확인 실패', 'RESULT_UNCONFIRMED'],
+                    ];
+                    const reason = error?.code === 'ARTICLE_WRITE_CAPTCHA_REQUIRED' ? 'CAPTCHA_REQUIRED'
+                        : known.find(([text]) => String(error?.message).includes(text))?.[1] || 'UNCLASSIFIED';
+                    const status = Number.isInteger(error?.httpStatus) && error.httpStatus >= 100 && error.httpStatus <= 599 ? error.httpStatus : 0;
+                    return { failure: `YGOSU_WRITE_HTTP_${status}_${reason}` };
+                }
             }, { board: BOARD, subject, body, codes: uploads.map(x => x.code), key, categoryCode });
+            if (outcome.failure) throw new Error(outcome.failure);
+            return outcome.articleId;
         },
     };
 }

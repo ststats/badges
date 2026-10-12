@@ -1,10 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { collectPosts, newPosts, postingCandidates, publishPosts, postTime, articleBody, articleSubject, noticeCategoryCode } from '../src/autopost.mjs';
+import { collectPosts, newPosts, postingCandidates, publishPosts, recoverPending, postTime, articleBody, articleSubject, noticeCategoryCode } from '../src/autopost.mjs';
 import { fullContent, noticeDocument } from '../src/notice-document.mjs';
 
 const post = (id, date = '2026-10-12 12:00:00') => ({ titleNo: id, userId: 'soju2022', regDate: date, titleName: '제목', content: { content: '<p>전체 본문</p>' }, photos: [] });
 const state = () => ({ version: 1, since: postTime(post(1)) - 1000, done: {} });
+
+test('복구는 지정한 pending 하나만 보내고 오류가 나면 잠금을 유지한다', async () => {
+    const s = state();
+    const now = Date.now();
+    s.pending = { id: '1', at: new Date(now - 1000).toISOString() };
+    const args = { state: s, posts: [post(1), post(2)], now: () => now, prepare: async () => [], save: async () => {} };
+    await assert.rejects(recoverPending({ ...args, id: '2', publish: () => assert.fail() }), /번호 불일치/);
+    await assert.rejects(recoverPending({ ...args, id: '1', publish: async p => { assert.equal(p.titleNo, 1); throw Error('HTTP 400'); } }));
+    assert.equal(s.pending.id, '1');
+    assert.throws(() => newPosts(s, [post(2)]), /자동 재전송/);
+    await assert.rejects(recoverPending({ ...args, id: '1', now: () => now + 60 * 60000, publish: () => assert.fail() }), /시간 초과/);
+    await recoverPending({ ...args, id: '1', publish: async p => { assert.equal(p.titleNo, 1); return 900; } });
+    assert.equal(s.done['1'], 900);
+    assert.equal(s.done['2'], undefined);
+    assert.equal(s.pending, undefined);
+});
 
 test('공지 카테고리는 같은 게시판의 실제 분류 링크에서만 읽는다', () => {
     assert.equal(noticeCategoryCode([
