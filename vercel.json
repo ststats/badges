@@ -1,4 +1,7 @@
 {
+    "regions": [
+        "icn1"
+    ],
     "buildCommand": "node scripts/vercel-public.mjs",
     "outputDirectory": "public",
     "functions": {

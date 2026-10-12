@@ -14,6 +14,6 @@ export default async function handler(req, res) {
     }
     res.statusCode = 302;
     res.setHeader('Location', target);
-    res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=60');
+    res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=60, stale-while-revalidate=600');
     res.end();
 }
