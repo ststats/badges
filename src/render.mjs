@@ -121,7 +121,7 @@ async function paletteOf(buf) {
 
 // 뱃지 주인: SOOP 프로필(soopId) 또는 로고 주소(logo). theme {from, to}가 있으면 사진 색 대신 그 색.
 const profiles = new Map();
-const profile = ({ soopId, logo, theme }) =>
+export const profile = ({ soopId, logo, theme }) =>
     remember(profiles, logo || soopId || '', async () => {
         const buf = logo ? await download(logo) : await profileBuf(soopId);
         const avatar = !buf ? null : logo ? logoOf(logo, buf, 120) : thumbOf(`profile|${soopId}`, buf, 120);
