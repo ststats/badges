@@ -26,7 +26,7 @@ async function main() {
     const browser = await chromium.launch({ headless: true });
     try {
         console.log('와고 자동 로그인');
-        const publisher = await ygosuPublisher(browser, { id: process.env.YGOSU_ID, password: process.env.YGOSU_PASSWORD });
+        const publisher = await ygosuPublisher(browser, { id: process.env.YGOSU_ID, password: process.env.YGOSU_PASSWORD, log: console.log });
         try {
             const before = state.lastPostedAt;
             await publishPosts({ state, posts, save: store.save, includeLatest,
@@ -41,7 +41,24 @@ async function main() {
     } finally { await browser.close(); }
 }
 
-main().catch(() => {
+main().catch(error => {
+    // 정해진 고정 문구만 분류한다. 오류 원문에는 URL/본문/인증 정보가 포함될 수 있다.
+    const known = [
+        ['SOOP 전체 본문이 없습니다', 'SOOP_FULL_BODY_MISSING'],
+        ['지원하지 않는 원문 이미지 주소', 'SOOP_IMAGE_HOST_UNSUPPORTED'],
+        ['원문에 영상이 있습니다', 'SOOP_VIDEO_UNSUPPORTED'],
+        ['원문 사진', 'SOOP_IMAGE_LOAD_FAILED'],
+        ['사진 주소를 확인', 'SOOP_ATTACHMENT_INVALID'],
+        ['와고 공지 카테고리 확인 실패', 'YGOSU_NOTICE_CATEGORY_MISSING'],
+        ['와고 첨부 부모 코드', 'YGOSU_ATTACHMENT_CONTEXT_MISSING'],
+        ['와고 글쓰기 권한/폼', 'YGOSU_WRITE_CONTEXT_INVALID'],
+        ['와고 이미지 업로드 실패', 'YGOSU_UPLOAD_FAILED'],
+        ['와고 자동 로그인 실패', 'YGOSU_LOGIN_FAILED'],
+        ['YGOSU_ID와 YGOSU_PASSWORD', 'YGOSU_CREDENTIAL_MISSING'],
+    ];
+    const code = known.find(([fragment]) => String(error?.message).includes(fragment))?.[1]
+        || (error?.name === 'TimeoutError' ? 'BROWSER_TIMEOUT' : 'UNCLASSIFIED');
+    console.error(`오류 분류: ${code}`);
     // 라이브러리 오류가 요청 본문/쿠키를 포함할 수 있어 원본 stack/message를 출력하지 않는다.
     console.error('자동 등록 중단: 인증·원문 이미지·사이트 변경·상태 파일을 확인하세요. pending이 있으면 와고 등록 결과를 먼저 확인하세요.');
     process.exitCode = 1;
