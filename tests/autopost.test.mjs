@@ -1,10 +1,34 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { collectPosts, newPosts, publishPosts, postTime, articleBody } from '../src/autopost.mjs';
+import { collectPosts, newPosts, postingCandidates, publishPosts, postTime, articleBody, articleSubject } from '../src/autopost.mjs';
 import { fullContent, noticeDocument } from '../src/notice-document.mjs';
 
 const post = (id, date = '2026-10-12 12:00:00') => ({ titleNo: id, userId: 'soju2022', regDate: date, titleName: '제목', content: { content: '<p>전체 본문</p>' }, photos: [] });
 const state = () => ({ version: 1, since: postTime(post(1)) - 1000, done: {} });
+
+test('와고 제목은 원문 공지 날짜의 YYMMDD 소주양 공지 형식이다', () => {
+    assert.equal(articleSubject(post(1)), '261012 소주양 공지');
+    assert.equal(articleSubject(post(2, '2025-12-31 23:59:59')), '251231 소주양 공지');
+    assert.throws(() => articleSubject({ regDate: '' }), /날짜/);
+});
+
+test('초기 테스트는 기준 이전 최신 하나만 등록하고 재실행해도 다른 과거 글을 올리지 않는다', async () => {
+    const s = { version: 1, since: Date.now(), done: { '1': 'baseline', '2': 'baseline', '3': 'baseline' } };
+    const posts = [post(1), post(3), post(2)];
+    assert.equal(newPosts(s, posts).length, 0);
+    const sent = [];
+    const args = { state: s, posts, includeLatest: true, prepare: async p => { sent.push(p.titleNo); return []; },
+        save: async () => {}, publish: async () => 901, now: () => 1000000 };
+    await publishPosts(args);
+    assert.deepEqual(sent, [3]);
+    assert.equal(s.done['3'], 901);
+    assert.equal(s.done['2'], 'baseline');
+    assert.equal(postingCandidates(s, posts, true).length, 0);
+    await publishPosts({ ...args, now: () => 2000000 });
+    assert.deepEqual(sent, [3]);
+    s.pending = { id: '4' };
+    assert.throws(() => postingCandidates(s, posts, true), /확인 필요/);
+});
 
 test('즐겨찾기 쿠키를 그대로 사용하고 여러 페이지/고정글을 중복 제거한다', async () => {
     const pages = [];

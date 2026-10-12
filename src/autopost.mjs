@@ -4,6 +4,11 @@ import { boardApiUrl, recentOwnPosts, escapeHTML, postUrl } from './lib.mjs';
 export const BOARD = 'pan_sojuyang';
 export const postTime = p => Date.parse(String(p.regDate).replace(' ', 'T') + '+09:00');
 
+export function articleSubject(post) {
+    if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(String(post.regDate)) || !Number.isFinite(postTime(post))) throw new Error('공지 제목 날짜 확인 실패');
+    return `${post.regDate.slice(2, 10).replaceAll('-', '')} 소주양 공지`;
+}
+
 export async function collectPosts({ soopId, cookie, since, fetcher = fetch }) {
     if (!cookie) throw new Error('SOOP_COOKIE 또는 저장된 SOOP 쿠키와 COOKIE_KEY가 필요합니다');
     const found = new Map();
@@ -48,6 +53,17 @@ export function newPosts(state, posts) {
     return posts.filter(p => postTime(p) >= state.since && !Object.hasOwn(state.done, String(p.titleNo)));
 }
 
+export function postingCandidates(state, posts, includeLatest = false) {
+    const fresh = newPosts(state, posts); // pending은 수동 테스트도 우회하지 않는다.
+    if (!includeLatest) return fresh;
+    const latest = [...posts].sort((a, b) => postTime(b) - postTime(a) || Number(b.titleNo) - Number(a.titleNo))[0];
+    if (!latest) return [];
+    const done = state.done[String(latest.titleNo)];
+    // 초기 기준/건너뛴 글만 일회성 등록 가능. 이미 등록한 최신 글이면 과거 글로 내려가지 않는다.
+    if (Object.hasOwn(state.done, String(latest.titleNo)) && !['baseline', 'skipped'].includes(done)) return [];
+    return [latest];
+}
+
 export function articleBody(soopId, post, uploads) {
     if (!uploads.length) throw new Error('완성된 공지 이미지가 없습니다');
     return uploads.map(x => `<p><img src="${escapeHTML(x.fileUrl)}" alt="공지 전체 ${x.part}" style="max-width:100%;height:auto"></p>`).join('')
@@ -56,8 +72,8 @@ export function articleBody(soopId, post, uploads) {
 
 export const coolingDown = (state, now = Date.now()) => Number.isFinite(state.lastPostedAt) && now - state.lastPostedAt < 5 * 60000;
 
-export async function publishPosts({ state, posts, save, prepare, publish, now = Date.now }) {
-    const candidates = newPosts(state, posts);
+export async function publishPosts({ state, posts, save, prepare, publish, now = Date.now, includeLatest = false }) {
+    const candidates = postingCandidates(state, posts, includeLatest);
     if (coolingDown(state, now()) || !candidates.length) return state;
     // 배열 순서와 무관하게 최신 하나만 선택한다. 밀린 글을 루프로 전송하지 않는다.
     const post = [...candidates].sort((a, b) => postTime(b) - postTime(a) || Number(b.titleNo) - Number(a.titleNo))[0];
