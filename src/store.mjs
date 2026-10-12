@@ -1,11 +1,8 @@
 // 일정·쿠키 저장소: 스타유니브 Supabase의 badge_files 표(supabase/badges.sql). 저장하면 바로 반영된다.
 // 읽기는 공개 키로 badge_get, 쓰기는 BADGE_WRITE_SECRET을 붙여 badge_put.
-// 표에 아직 없으면 저장소의 시작값(schedule.txt·cookie.enc)을, Supabase가 안 되면 직전에 읽은 값을 쓴다.
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { config, root } from './config.mjs';
+// Supabase가 잠깐 안 되면 직전에 읽은 값을 쓴다.
+import { config } from './config.mjs';
 
-const SEED = { schedule: 'schedule.txt', cookie: 'cookie.enc' };
 const MEMO_MS = 10000; // 같은 함수 인스턴스 안에서는 10초 기억(뱃지 요청마다 DB를 부르지 않게)
 const memo = new Map();
 const lastGood = new Map();
@@ -23,9 +20,6 @@ async function rpc(fn, args) {
     return body;
 }
 
-const seed = name =>
-    fs.readFile(path.join(root, SEED[name]), 'utf-8').then(content => ({ content, version: null }), () => null);
-
 // { content, version } 또는 아무것도 없으면 null
 export async function getFile(name) {
     const hit = memo.get(name);
@@ -33,11 +27,11 @@ export async function getFile(name) {
     let value;
     try {
         const row = (await rpc('badge_get', { p_name: name }))?.[0];
-        value = row ? { content: row.content, version: row.updated_at } : await seed(name);
+        value = row ? { content: row.content, version: row.updated_at } : null;
         lastGood.set(name, value);
     } catch (e) {
         console.error(`badge_get(${name}) 실패:`, e.message);
-        value = lastGood.has(name) ? lastGood.get(name) : await seed(name);
+        value = lastGood.get(name) ?? null;
     }
     memo.set(name, { at: Date.now(), value });
     return value;

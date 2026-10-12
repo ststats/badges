@@ -3,7 +3,7 @@
     "outputDirectory": "public",
     "functions": {
         "api/*.js": {
-            "includeFiles": "{fonts/**,schedule.txt,config.json,cookie.enc}",
+            "includeFiles": "{fonts/**,config.json}",
             "memory": 1024,
             "maxDuration": 20
         }

@@ -64,7 +64,7 @@ function resolveDate(token, nowMs) {
         .sort((a, b) => Math.abs(Date.parse(a) - today) - Math.abs(Date.parse(b) - today))[0] || null;
 }
 
-// schedule.txt: 한 줄에 '날짜 [시간] 내용'. 내용이 '휴방'이면 휴방일. #로 시작하는 줄과 빈 줄은 건너뛴다.
+// 일정 글: 한 줄에 '날짜 [시간] 내용'. 내용이 '휴방'이면 휴방일. #로 시작하는 줄과 빈 줄은 건너뛴다.
 export function parseSchedule(text, nowMs) {
     const events = [];
     const offAir = new Set();
