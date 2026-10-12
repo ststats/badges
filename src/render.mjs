@@ -164,12 +164,14 @@ const avatarImg = (avatar, size) =>
         ? img(avatar, size, size, { borderRadius: size, border: '2.5px solid #fff', objectFit: 'cover', boxShadow: '0 2px 8px rgba(24,24,27,0.15)' })
         : h('div', { width: size, height: size, borderRadius: size, background: 'rgba(255,255,255,0.7)' });
 
-const button = (label, dark) =>
+// 버튼·NEW·오늘 칸은 머리와 같은 연한 색 바탕에 진한 색(accent) 글자
+const soft = colors => ({ background: colors.from, color: colors.accent });
+const button = (label, colors, big) =>
     h(
         'div',
-        { alignItems: 'center', gap: 6, fontSize: dark ? 13 : 12, fontWeight: 700, borderRadius: 999, padding: dark ? '8px 14px 8px 16px' : '6px 12px 6px 13px', background: dark ? C.ink : C.tint, color: dark ? '#fff' : C.ink },
+        { alignItems: 'center', gap: 6, fontSize: big ? 13 : 12, fontWeight: 700, borderRadius: 999, padding: big ? '8px 14px 8px 16px' : '6px 12px 6px 13px', ...soft(colors) },
         label,
-        img(ARROW(dark ? '#fff' : C.ink), 12, 12)
+        img(ARROW(colors.accent), 12, 12)
     );
 
 const textBlock = (text, style) => h('div', { display: 'block', wordBreak: 'keep-all', overflow: 'hidden', ...style }, text);
@@ -206,7 +208,7 @@ export async function renderNotice({ name, soopId, post, lines = 3, format = 'pn
             h('div', { flex: 1, flexDirection: 'column' },
                 h('div', { fontSize: featured ? 15 : 14, fontWeight: 800 }, name),
                 post && h('div', { fontSize: featured ? 12.5 : 12, color: C.sub, marginTop: 2 }, formatPostDate(post.regDate))),
-            featured && h('div', { fontSize: 11.5, fontWeight: 800, letterSpacing: '0.04em', color: '#fff', background: colors.accent, borderRadius: 999, padding: '5px 11px' }, 'NEW')
+            featured && h('div', { fontSize: 11.5, fontWeight: 800, letterSpacing: '0.04em', borderRadius: 999, padding: '5px 11px', background: 'rgba(255,255,255,0.8)', color: colors.accent }, 'NEW')
         )
     );
     if (!post) return out(format, card(head, h('div', { padding: '20px 24px 22px', fontSize: 15, color: C.faint }, '아직 글이 없습니다')));
@@ -225,10 +227,10 @@ export async function renderNotice({ name, soopId, post, lines = 3, format = 'pn
             shown.length > 0 && h('div', { gap: 8, marginTop: 16 },
                 shown.map((src, i) => h('div', { position: 'relative', width: size, height: size, borderRadius: 14, overflow: 'hidden', background: C.tint },
                     img(src, size, size, { objectFit: 'cover' }), i === shown.length - 1 && more(extra)))),
-            h('div', { justifyContent: 'flex-end', marginTop: 18 }, button('원글 보기', true)))));
+            h('div', { justifyContent: 'flex-end', marginTop: 18 }, button('원글 보기', colors, true)))));
     }
     return out(format, card(head, h('div', { alignItems: 'center', gap: 16, padding: '16px 20px 18px' },
-        h('div', { flex: 1, flexDirection: 'column' }, title, body, h('div', { marginTop: 12 }, button('원글 보기', false))),
+        h('div', { flex: 1, flexDirection: 'column' }, title, body, h('div', { marginTop: 12 }, button('원글 보기', colors))),
         shown[0] && h('div', { position: 'relative', width: 100, height: 100, borderRadius: 16, overflow: 'hidden', background: C.tint },
             img(shown[0], 100, 100, { objectFit: 'cover' }),
             extra > 0 && h('div', { position: 'absolute', right: 6, bottom: 6, fontSize: 12.5, fontWeight: 800, color: '#fff', background: 'rgba(24,24,27,0.65)', borderRadius: 999, padding: '3px 8px' }, `+${extra}`)))));
@@ -250,10 +252,10 @@ export async function renderSchedule({ name, soopId, days, today, footer, format
     const rows = days.map(({ date, offAir, events }) => {
         const wd = weekdayOf(date);
         const isToday = date === today;
-        const wdColor = isToday ? 'rgba(255,255,255,0.7)' : wd === '일' ? C.red : wd === '토' ? C.blue : C.sub;
-        const dayBox = h('div', { width: 52, height: 52, flexShrink: 0, borderRadius: 15, background: isToday ? colors.accent : C.tint, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: offAir && !isToday ? 0.55 : 1 },
+        const wdColor = isToday ? colors.accent : wd === '일' ? C.red : wd === '토' ? C.blue : C.sub;
+        const dayBox = h('div', { width: 52, height: 52, flexShrink: 0, borderRadius: 15, background: isToday ? colors.from : C.tint, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: offAir && !isToday ? 0.55 : 1 },
             h('div', { fontSize: 12, fontWeight: 700, color: wdColor }, wd),
-            h('div', { fontSize: 18, fontWeight: 800, lineHeight: 1.1, color: isToday ? '#fff' : C.ink }, String(Number(date.slice(8, 10)))));
+            h('div', { fontSize: 18, fontWeight: 800, lineHeight: 1.1, color: isToday ? colors.accent : C.ink }, String(Number(date.slice(8, 10)))));
         const items = [
             offAir && h('div', { alignSelf: 'flex-start', alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 700, color: C.sub, background: isToday ? '#fff' : C.tint, borderRadius: 999, padding: '5px 12px 5px 10px' }, img(MOON, 13, 13), '휴방'),
             // 그날 시간이 있는 일정이 하나라도 있으면 시간 칸을 비워서라도 맞춘다
@@ -267,7 +269,7 @@ export async function renderSchedule({ name, soopId, days, today, footer, format
     });
     return out(format, card(head,
         h('div', { flexDirection: 'column', padding: '8px 14px' }, rows),
-        footer && h('div', { justifyContent: 'center', padding: '6px 0 20px' }, button(footer, true))));
+        footer && h('div', { justifyContent: 'center', padding: '6px 0 20px' }, button(footer, colors, true))));
 }
 
 const toSvg = async tree => satori(tree, { width: CARD_W + 28, fonts: await loadFonts(), loadAdditionalAsset });
