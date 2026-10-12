@@ -2,6 +2,17 @@
 import { boardApiUrl, recentOwnPosts, escapeHTML, postUrl } from './lib.mjs';
 
 export const BOARD = 'pan_sojuyang';
+
+export function noticeCategoryCode(links, board = BOARD) {
+    for (const link of links) {
+        if (String(link.text).trim() !== '공지') continue;
+        const url = new URL(link.href, 'https://ygosu.com');
+        const code = url.searchParams.get('s_category');
+        if (url.origin === 'https://ygosu.com' && url.pathname.replace(/\/$/, '') === `/board/${board}`
+            && /^C[a-zA-Z0-9._-]+$/.test(code || '')) return code;
+    }
+    throw new Error('와고 공지 카테고리 확인 실패');
+}
 export const postTime = p => Date.parse(String(p.regDate).replace(' ', 'T') + '+09:00');
 
 export function articleSubject(post) {
