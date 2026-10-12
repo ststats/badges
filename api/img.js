@@ -45,7 +45,9 @@ export default async function handler(req, res) {
             // 고정 주소이거나 지난 해시: 지금 그림으로 보낸다
             res.statusCode = 302;
             res.setHeader('Location', `/${base}.${key}.png`);
-            res.setHeader('Cache-Control', v ? 'public, max-age=0, s-maxage=10' : 'public, max-age=60, s-maxage=60, stale-if-error=86400');
+            // 일정은 저장하면 바로 바뀌므로 고정 주소를 20초만 기억한다(글은 SOOP 쪽이라 1분)
+            const fresh = base === 'schedule' ? 'public, max-age=0, s-maxage=20' : 'public, max-age=60, s-maxage=60';
+            res.setHeader('Cache-Control', v ? 'public, max-age=0, s-maxage=10' : `${fresh}, stale-if-error=86400`);
             return res.end();
         }
         const png = await render();

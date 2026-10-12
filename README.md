@@ -20,17 +20,24 @@
   해시를 붙인 `/notice-1.<해시>.png`로 보냅니다(CDN 1분). 해시 주소는 `src/render.mjs`가 satori + resvg로 **한 번만**
   그리고 CDN이 계속 씁니다. 내용이 바뀔 때만 그려서 Vercel 무료 한도(Active CPU 월 4시간, 스타유니브·시너지와 합산)를
   거의 쓰지 않습니다. SOOP이 잠깐 안 되면 직전 목록을 6시간까지 대신 써서 깨진 이미지가 뜨지 않습니다.
-- **편집 화면**(`/edit/`, `src/edit.html`): 읽기·저장은 `api/save.js`(비밀번호 확인 후 서버의 GitHub 토큰으로 커밋),
+- **편집 화면**(`/edit/`, `src/edit.html`): 읽기·저장은 `api/save.js`(비밀번호 확인 후 Supabase에 저장, 바로 반영),
   미리보기는 `api/preview.js`(실제 뱃지와 같은 그림을 SVG로, 그림 변환을 건너뛰어 빠름).
-- **일정**은 `schedule.txt`, **쿠키**는 `cookie.enc`(암호문). 저장하면 커밋되고 Vercel이 다시 배포합니다(1~2분).
+- **일정·쿠키**는 스타유니브 Supabase의 `badge_files` 표(`supabase/badges.sql`)에 둡니다. 쿠키는 암호문.
+  저장하면 재배포 없이 바로 반영되고(일정 뱃지 고정 주소는 20초 캐시), Supabase가 안 되거나 표가 비어 있으면
+  저장소의 `schedule.txt`·`cookie.enc`를 대신 읽습니다.
 - `src/lib.mjs`는 글 목록·일정 처리(서버와 편집 화면이 같이 씀), `src/live.mjs`는 SOOP 읽기·쿠키.
+
+### Supabase(처음 한 번)
+
+스타유니브 Supabase SQL 편집기에서 `supabase/badges.sql`을 실행하고, 맨 아래 주석처럼 쓰기 비밀값을 만듭니다:
+`select vault.create_secret('<긴 아무 문자열>', 'badge_write_secret');` → 같은 값을 Vercel `BADGE_WRITE_SECRET`에.
 
 ### Vercel 환경 변수
 
 | 이름 | 내용 |
 |---|---|
 | `EDIT_PASSWORD` | 편집 화면 비밀번호(4자 이상) |
-| `GITHUB_TOKEN` | `ststats/badges` Contents: Read and write 토큰(서버가 대신 커밋) |
+| `BADGE_WRITE_SECRET` | Supabase Vault `badge_write_secret`과 같은 값(저장 권한) |
 | `COOKIE_KEY` | 쿠키 암호화 열쇠(16자 이상, 바꾸면 편집 화면에서 쿠키를 다시 저장) |
 | `SOOP_COOKIE` | (선택, 예비) `cookie.enc`가 없을 때 쓰는 쿠키 |
 
@@ -48,7 +55,7 @@
 **뱃지 주소를 아는 사람은 누구나 그 글을 보게 되니** 커뮤니티 등에 올릴 때는 쿠키를 빼세요.
 
 - **쿠키 넣기·바꾸기:** 편집 화면의 **SOOP 쿠키 바꾸기**에 붙여 넣고 저장(편집 비밀번호 필요). 서버가 SOOP에서 먹히는지
-  먼저 보고, `COOKIE_KEY`로 암호화해 `cookie.enc`로 커밋합니다(저장소에는 암호문만, 1~2분 뒤 적용).
+  먼저 보고, `COOKIE_KEY`로 암호화해 저장합니다(암호문만 저장, 바로 적용).
   쿠키 얻기: PC 크롬에서 로그인한 채로 소주양 게시판 → F12 → Network → 새로고침 → `board` 요청 → Request Headers의 **cookie** 값 전체.
 - 편집 화면 맨 위에 쿠키 상태가 나오고, 만료가 의심되면(즐겨찾기 글이 하나도 안 보이면) 빨간 알림이 뜹니다.
   `/status`에서 자세히 볼 수 있습니다.
@@ -58,13 +65,12 @@
 
 **편집 화면: https://staruniv-badges.vercel.app/edit/** (휴대폰에서도 됩니다)
 
-요일마다 `+ 일정 추가`로 시간·내용을 적고, 쉬는 날은 `휴방`을 체크한 뒤 **저장**. 1~2분 뒤 뱃지가 바뀝니다.
+요일마다 `+ 일정 추가`로 시간·내용을 적고, 쉬는 날은 `휴방`을 체크한 뒤 **저장**. 바로 반영됩니다(커뮤니티에서는 길어야 30초쯤).
 오른쪽(휴대폰은 아래)에 뱃지 미리보기가 바로 보이고, `다음 주 ›`로 미리 적어 둘 수 있습니다(뱃지에는 늘 이번 주만).
 
 - 시간은 `20:00`(또는 `2000`, `20시`), 모르면 `미정`, 비우면 시간 없이 나옵니다.
 - 처음 한 번 **편집 비밀번호**를 넣으면 그 브라우저에 기억됩니다.
-- 저장하면 서버가 저장소의 [`schedule.txt`](schedule.txt)를 고쳐 커밋합니다. 그 파일을 GitHub에서 직접 고쳐도 됩니다
-  (한 줄에 `날짜 [시간] 내용`, 내용이 `휴방`이면 휴방).
+- 저장 형식은 한 줄에 `날짜 [시간] 내용`(내용이 `휴방`이면 휴방). 저장소의 `schedule.txt`는 Supabase에 일정이 없을 때만 씁니다.
 
 ## 최근 글
 
@@ -84,5 +90,5 @@ SOOP 방송국 게시판 첫 쪽에서 소주양 본인 글(고정 공지 포함
 ```sh
 npm ci
 npm test
-EDIT_PASSWORD=… GITHUB_TOKEN=… COOKIE_KEY=… npm run dev   # http://localhost:3000 (vercel.json 경로를 흉내 낸 서버)
+EDIT_PASSWORD=… BADGE_WRITE_SECRET=… COOKIE_KEY=… npm run dev   # http://localhost:3000 (vercel.json 경로를 흉내 낸 서버)
 ```

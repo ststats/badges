@@ -1,12 +1,12 @@
-// 편집 화면의 읽기·저장. 저장은 비밀번호(EDIT_PASSWORD)를 확인하고 서버의 GITHUB_TOKEN으로 커밋한다.
-//   GET  /api/save                                → { content, sha } (schedule.txt, 최신)
-//   POST /api/save {password, file:'schedule', content, sha}
-//   POST /api/save {password, file:'cookie', cookie}   → SOOP에서 먹는지 보고 암호화해 cookie.enc로
+// 편집 화면의 읽기·저장. 저장은 비밀번호(EDIT_PASSWORD)를 확인하고 Supabase(badge_files)에 넣는다(바로 반영).
+//   GET  /api/save                                → { content, version } (일정, 최신)
+//   POST /api/save {password, file:'schedule', content, version}
+//   POST /api/save {password, file:'cookie', cookie}   → SOOP에서 먹는지 보고 암호화해 저장
 //   POST /api/save {password, file:'check'}            → 비밀번호만 확인
 import crypto from 'node:crypto';
-import { readFile, writeFile } from '../src/github.mjs';
 import { parseSchedule } from '../src/lib.mjs';
-import { checkCookie, cookieKeyReady, encryptCookie } from '../src/live.mjs';
+import { checkCookie, cookieKeyReady, encryptCookie, forgetBoard, scheduleFile } from '../src/live.mjs';
+import { putFile } from '../src/store.mjs';
 
 const send = (res, status, body) => {
     res.statusCode = status;
@@ -35,7 +35,7 @@ function passwordOk(given) {
 
 export default async function handler(req, res) {
     try {
-        if (req.method === 'GET') return send(res, 200, (await readFile('schedule.txt')) || { content: '', sha: null });
+        if (req.method === 'GET') return send(res, 200, await scheduleFile());
         if (req.method !== 'POST') return send(res, 405, { error: 'GET·POST만 됩니다' });
 
         const body = await readJson(req);
@@ -52,8 +52,8 @@ export default async function handler(req, res) {
             if (content.length > 60000) return send(res, 400, { error: '일정이 너무 깁니다' });
             const { errors } = parseSchedule(content, Date.now());
             if (errors.length) return send(res, 400, { error: `읽지 못하는 줄이 있어요: ${errors.slice(0, 3).join(' / ')}` });
-            const sha = await writeFile('schedule.txt', content, body.sha || undefined, '일정 수정(편집 화면)');
-            return send(res, 200, { sha });
+            const version = await putFile('schedule', content, body.version);
+            return send(res, 200, { version });
         }
 
         if (body.file === 'cookie') {
@@ -67,8 +67,8 @@ export default async function handler(req, res) {
             } catch (e) {
                 return send(res, 400, { error: `SOOP이 이 쿠키를 받지 않았어요(${e.message}). 로그인한 상태에서 다시 복사해 주세요.` });
             }
-            const prev = await readFile('cookie.enc');
-            await writeFile('cookie.enc', encryptCookie(cookie), prev?.sha, 'SOOP 쿠키 바꿈(편집 화면, 암호문)');
+            await putFile('cookie', encryptCookie(cookie));
+            forgetBoard();
             return send(res, 200, { extraCount });
         }
         send(res, 400, { error: '알 수 없는 요청입니다' });

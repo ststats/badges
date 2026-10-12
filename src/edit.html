@@ -94,7 +94,7 @@ details textarea { width: 100%; min-height: 84px; border: 1px solid var(--line);
         <li>F12 → Network → 새로고침 → 이름에 <b>board</b>가 들어간 요청 → Headers → Request Headers의 <b>cookie</b> 값 전체 복사</li>
         <li>아래에 붙여 넣고 저장(위 편집 비밀번호를 씁니다)</li>
       </ol>
-      <p class="hint">저장하면 서버가 SOOP에서 먹히는지 먼저 확인하고, 암호화해서 저장소에 올립니다(저장소에는 암호문만). 1~2분 뒤 적용돼요.</p>
+      <p class="hint">저장하면 서버가 SOOP에서 먹히는지 먼저 확인하고, 암호화해서 저장해요(암호문만 저장). 바로 적용돼요.</p>
       <textarea id="cookieInput" placeholder="AbroadChk=OK; …" autocomplete="off" spellcheck="false"></textarea>
       <button class="btn primary" id="cookieSave" type="button">쿠키 저장</button>
       <div class="cookie-msg" id="cookieMsg"></div>
@@ -143,7 +143,7 @@ async function post(body) {
     return data;
 }
 
-let state = { events: [], offAir: new Set(), header: '', sha: '' };
+let state = { events: [], offAir: new Set(), header: '', version: null };
 let weekOffset = 0;
 let dirty = false;
 let loading = false;
@@ -166,7 +166,7 @@ async function load() {
             if (line.trim() === '' || line.trim().startsWith('#')) header.push(line);
             else break;
         }
-        state = { events: parsed.events, offAir: parsed.offAir, header: header.join('\n'), sha: data.sha };
+        state = { events: parsed.events, offAir: parsed.offAir, header: header.join('\n'), version: data.version };
         dirty = false;
         status(parsed.errors.length ? `불러옴. 읽지 못한 줄 ${parsed.errors.length}개는 저장하면 사라집니다: ${parsed.errors.join(' / ')}` : '불러왔습니다', parsed.errors.length ? 'err' : '');
     } catch (e) {
@@ -306,12 +306,12 @@ $('save').addEventListener('click', async () => {
     status('저장 중…');
     try {
         const text = serializeSchedule(cleanState(), state.header);
-        const data = await post({ file: 'schedule', content: text, sha: state.sha });
-        state.sha = data.sha;
+        const data = await post({ file: 'schedule', content: text, version: state.version });
+        state.version = data.version;
         state.events = cleanState().events;
         dirty = false;
         render();
-        status('저장했습니다. 1~2분 뒤 뱃지에 반영됩니다.', 'ok');
+        status('저장했습니다. 뱃지에 바로 반영돼요(커뮤니티에서는 길어야 30초쯤).', 'ok');
     } catch (e) {
         status(`저장하지 못했습니다: ${e.message}`, 'err');
         refreshButtons();
@@ -362,8 +362,8 @@ $('cookieSave').addEventListener('click', async () => {
         const data = await post({ file: 'cookie', cookie });
         $('cookieInput').value = '';
         msg(data.extraCount
-            ? `저장했어요. 즐겨찾기 전용 글 ${data.extraCount}개가 보이는 쿠키예요. 1~2분 뒤 뱃지에 적용돼요.`
-            : '저장했어요. 다만 이 쿠키로도 즐겨찾기 전용 글이 안 보여요(로그인이 풀린 쿠키일 수 있어요). 1~2분 뒤 적용돼요.', data.extraCount ? 'ok' : 'err');
+            ? `저장했어요. 즐겨찾기 전용 글 ${data.extraCount}개가 보이는 쿠키예요. 바로 적용돼요.`
+            : '저장했어요. 다만 이 쿠키로도 즐겨찾기 전용 글이 안 보여요(로그인이 풀린 쿠키일 수 있어요).', data.extraCount ? 'ok' : 'err');
     } catch (e) {
         msg(`저장하지 못했어요: ${e.message}`, 'err');
     } finally {

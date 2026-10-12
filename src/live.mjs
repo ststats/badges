@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { boardApiUrl, recentOwnPosts } from './lib.mjs';
+import { getFile } from './store.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const config = JSON.parse(await fs.readFile(path.join(root, 'config.json'), 'utf-8'));
@@ -49,19 +50,20 @@ export function decryptCookie(text) {
     return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString('utf8');
 }
 
-let cookiePromise = null;
 export const cookieKeyReady = () => (process.env.COOKIE_KEY || '').length >= 16;
-function currentCookie() {
-    return (cookiePromise ||= (async () => {
-        if (cookieKeyReady()) {
-            try {
-                return { cookie: decryptCookie(await fs.readFile(path.join(root, 'cookie.enc'), 'utf-8')), source: 'edit' };
-            } catch (e) {
-                if (e.code !== 'ENOENT') console.error('cookie.enc를 풀지 못했습니다(COOKIE_KEY가 바뀌었나요?):', e.message);
-            }
+
+// 쿠키 찾는 순서: Supabase(편집 화면에서 저장, 바로 반영) → 저장소의 cookie.enc(예전 방식) → 환경 변수 SOOP_COOKIE
+async function currentCookie() {
+    if (cookieKeyReady()) {
+        const stored = await getFile('cookie');
+        try {
+            if (stored?.content) return { cookie: decryptCookie(stored.content), source: 'store' };
+            return { cookie: decryptCookie(await fs.readFile(path.join(root, 'cookie.enc'), 'utf-8')), source: 'file' };
+        } catch (e) {
+            if (e.code !== 'ENOENT') console.error('쿠키 암호문을 풀지 못했습니다(COOKIE_KEY가 바뀌었나요?):', e.message);
         }
-        return { cookie: process.env.SOOP_COOKIE || '', source: process.env.SOOP_COOKIE ? 'env' : 'none' };
-    })());
+    }
+    return { cookie: process.env.SOOP_COOKIE || '', source: process.env.SOOP_COOKIE ? 'env' : 'none' };
 }
 
 // 편집 화면이 새 쿠키를 저장하기 전에 SOOP이 받아 주는지 본다. 공개 목록에 없는 글 수를 돌려준다.
@@ -105,6 +107,9 @@ async function cachedBoard() {
     return guarded;
 }
 
+// 새 쿠키를 저장한 뒤 바로 반영되게 30초 기억을 지운다
+export const forgetBoard = () => { boardCache = { at: 0, request: null }; };
+
 export const recentPosts = () => cachedBoard().then(posts => posts.slice(0, config.noticeCount));
 
 // /status 화면용: 쿠키로 받은 목록에 공개 목록에 없는 글이 있으면 즐겨찾기 글까지 받고 있는 것
@@ -115,7 +120,12 @@ export async function cookieStatus() {
     return { hasCookie: source !== 'none', source, error: lastCookieError, extra: mine.filter(p => !pubIds.has(p.titleNo)) };
 }
 
-// 편집 화면에서 저장하면 커밋 → Vercel이 다시 배포하므로 파일만 읽으면 된다
-export const scheduleText = () => fs.readFile(path.join(root, 'schedule.txt'), 'utf-8');
+// 일정: Supabase에 저장된 것을 먼저, 없거나 Supabase가 안 되면 저장소의 schedule.txt
+export async function scheduleFile() {
+    const stored = await getFile('schedule');
+    if (stored) return stored;
+    return { content: await fs.readFile(path.join(root, 'schedule.txt'), 'utf-8'), version: null };
+}
+export const scheduleText = async () => (await scheduleFile()).content;
 
 export const query = req => new URL(req.url, 'http://localhost').searchParams;
