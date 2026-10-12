@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSchedule, postText, serializeSchedule, recentOwnPosts, redirectHtml, weekDates, weekSchedule } from '../src/lib.mjs';
+import { parseSchedule, postText, serializeSchedule, recentOwnPosts, weekDates, weekSchedule } from '../src/lib.mjs';
 
 test('이번 주는 한국 시간 월요일부터', () => {
     // 2026-10-11 15:30 UTC = 10-12(월) 00:30 KST
@@ -40,12 +40,6 @@ test('최근 글: 본인 글만, 고정 공지와 겹치면 한 번, 최신순',
         noticeData: [{ titleNo: 1, userId: 'soju2022', regDate: '2026-10-01 10:00:00' }, { titleNo: 4, userId: 'soju2022', regDate: '2026-10-05 10:00:00' }],
     };
     assert.deepEqual(recentOwnPosts(board, 'soju2022', 3).map(p => p.titleNo), [3, 4, 1]);
-});
-
-test('이동 페이지는 주소를 스크립트 밖으로 새지 않게 넣는다', () => {
-    const html = redirectHtml('https://example.com/a"</script><b>');
-    assert.ok(!html.includes('</script><b>'));
-    assert.ok(html.includes('content="0;url=https://example.com/a&quot;'));
 });
 
 test('본문은 HTML에서 줄바꿈을 살려 뽑는다', () => {

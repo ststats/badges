@@ -209,7 +209,8 @@ export async function renderNotice({ name, soopId, post, lines = 3 }) {
 
 const mmdd = date => `${Number(date.slice(5, 7))}.${Number(date.slice(8, 10))}`;
 
-export async function renderSchedule({ name, soopId, days, today, footer }) {
+// format: 'png'(뱃지) 또는 'svg'(편집 화면 미리보기: 그림으로 바꾸지 않아 훨씬 빠르다)
+export async function renderSchedule({ name, soopId, days, today, footer, format = 'png' }) {
     const [avatar, banner] = await Promise.all([fetchImage(avatarUrl(soopId), 160), colorBanner(avatarUrl(soopId))]);
     const head = hero(
         banner,
@@ -238,12 +239,15 @@ export async function renderSchedule({ name, soopId, days, today, footer }) {
         return h('div', { alignItems: 'center', gap: 16, padding: '10px 12px', borderRadius: 16, marginTop: 2, background: isToday ? C.tint : 'transparent' },
             dayBox, h('div', { flex: 1, flexDirection: 'column', gap: 6 }, items));
     });
-    return png(card(head,
+    return out(format, card(head,
         h('div', { flexDirection: 'column', padding: '8px 14px' }, rows),
         footer && h('div', { justifyContent: 'center', padding: '6px 0 20px' }, button(footer, true))));
 }
 
+const toSvg = async tree => satori(tree, { width: CARD_W + 28, fonts: await loadFonts(), loadAdditionalAsset });
+const out = (format, tree) => (format === 'svg' ? toSvg(tree) : png(tree));
+
 async function png(tree) {
-    const svg = await satori(tree, { width: CARD_W + 28, fonts: await loadFonts(), loadAdditionalAsset });
+    const svg = await toSvg(tree);
     return new Resvg(svg, { fitTo: { mode: 'original' }, font: { loadSystemFonts: false } }).render().asPng();
 }

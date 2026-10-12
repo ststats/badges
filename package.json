@@ -2,17 +2,13 @@
   "name": "badges",
   "private": true,
   "type": "module",
-  "description": "소주양 최근 글·주간 일정 뱃지 이미지(커뮤니티 삽입용)",
+  "description": "소주양 최근 글·주간 일정 뱃지(Vercel에서 볼 때마다 그림)",
   "scripts": {
-    "build": "node scripts/build.mjs",
     "test": "node --test tests/*.test.mjs",
     "dev": "node scripts/vercel-public.mjs && node scripts/dev-server.mjs"
   },
   "engines": {
     "node": ">=22"
-  },
-  "devDependencies": {
-    "playwright-core": "1.63.0"
   },
   "dependencies": {
     "@resvg/resvg-js": "2.6.2",

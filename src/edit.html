@@ -51,7 +51,8 @@ aside { position: sticky; top: 84px; }
 @media (max-width: 1100px) { aside { position: static; } }
 aside h2 { font-size: 14px; color: var(--sub); margin: 4px 0 8px; }
 .preview { width: 100%; overflow: hidden; }
-.preview iframe { width: 640px; border: 0; display: block; transform-origin: 0 0; background: transparent; }
+.preview img { width: 100%; max-width: 628px; display: block; transition: opacity .15s; }
+.preview img.busy { opacity: .5; }
 details { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; margin-top: 16px; }
 summary { font-weight: 700; cursor: pointer; }
 details input { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; margin: 8px 0; }
@@ -78,24 +79,20 @@ details textarea { width: 100%; min-height: 84px; border: 1px solid var(--line);
     <div id="days"></div>
     <p class="hint">시간은 <b>20:00</b>처럼 적고, 모르면 <b>미정</b>, 비워 두면 시간 없이 나옵니다. 내용을 비운 줄은 저장할 때 빠집니다.
       뱃지에는 늘 <b>이번 주</b>만 나오니, 다음 주 일정은 미리 적어 두면 월요일에 저절로 바뀝니다.</p>
-    <details id="tokenBox">
-      <summary>저장 권한(처음 한 번)</summary>
-      <p class="hint">저장하면 이 화면이 GitHub의 <code>schedule.txt</code>를 고칩니다. 그러려면 GitHub 토큰이 필요하고, 토큰은 이 브라우저에만 기억됩니다.</p>
-      <ol class="hint">
-        <li><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">GitHub 토큰 만들기</a>(ststats 계정으로 로그인)</li>
-        <li>Repository access: <b>Only select repositories → ststats/badges</b></li>
-        <li>Permissions → Repository permissions → <b>Contents: Read and write</b></li>
-        <li>만든 토큰(<code>github_pat_…</code>)을 아래에 붙여 넣기</li>
-      </ol>
-      <input id="token" type="password" placeholder="github_pat_…" autocomplete="off">
-      <button class="btn" id="forget" type="button">이 브라우저에서 토큰 지우기</button>
+    <details id="pwBox">
+      <summary>편집 비밀번호</summary>
+      <p class="hint">저장할 때 쓰는 비밀번호예요(Vercel 환경 변수 <code>EDIT_PASSWORD</code>). 한 번 넣으면 이 브라우저에 기억돼요.</p>
+      <input id="pw" type="password" placeholder="비밀번호" autocomplete="current-password">
+      <button class="btn" id="pwCheck" type="button">확인</button>
+      <button class="btn" id="forget" type="button">이 브라우저에서 지우기</button>
+      <div class="cookie-msg" id="pwMsg"></div>
     </details>
-    <details id="cookieBox" hidden>
+    <details id="cookieBox">
       <summary>SOOP 쿠키 바꾸기(즐겨찾기 글용)</summary>
       <ol class="hint">
         <li>PC 크롬에서 SOOP에 로그인한 채로 <a href="https://www.sooplive.co.kr/station/soju2022/board" target="_blank" rel="noopener">소주양 게시판</a>을 열기</li>
         <li>F12 → Network → 새로고침 → 이름에 <b>board</b>가 들어간 요청 → Headers → Request Headers의 <b>cookie</b> 값 전체 복사</li>
-        <li>아래에 붙여 넣고 저장(위 "저장 권한"의 GitHub 토큰을 씁니다)</li>
+        <li>아래에 붙여 넣고 저장(위 편집 비밀번호를 씁니다)</li>
       </ol>
       <p class="hint">저장하면 서버가 SOOP에서 먹히는지 먼저 확인하고, 암호화해서 저장소에 올립니다(저장소에는 암호문만). 1~2분 뒤 적용돼요.</p>
       <textarea id="cookieInput" placeholder="AbroadChk=OK; …" autocomplete="off" spellcheck="false"></textarea>
@@ -105,29 +102,46 @@ details textarea { width: 100%; min-height: 84px; border: 1px solid var(--line);
   </section>
   <aside>
     <h2>미리보기</h2>
-    <div class="preview" id="previewBox"><iframe id="preview" title="미리보기" scrolling="no"></iframe></div>
+    <div class="preview" id="previewBox"><img id="preview" alt="뱃지 미리보기"></div>
   </aside>
 </main>
 <script type="module">
-import { kstToday, parseSchedule, scheduleBadgeHtml, serializeSchedule, shiftWeek, weekSchedule } from '../lib.mjs';
+import { kstToday, parseSchedule, serializeSchedule, shiftWeek, weekSchedule } from '../lib.mjs';
 
-const REPO = 'ststats/badges';
-const FILE = 'schedule.txt';
-const API = `https://api.github.com/repos/${REPO}/contents/${FILE}`;
-const TOKEN_KEY = 'badges-github-token';
+// 읽기·저장은 서버(/api/save)가 하고, 저장은 편집 비밀번호를 확인한다. 미리보기도 서버가 실제 뱃지처럼 그린다.
+const PW_KEY = 'badges-edit-password';
 const $ = id => document.getElementById(id);
 const config = await fetch('../config.json', { cache: 'no-store' }).then(r => r.json());
 document.title = `${config.name} 일정 편집`;
 $('title').textContent = `${config.name} 일정 편집`;
 
 const store = {
-    get: () => { try { return localStorage.getItem(TOKEN_KEY) || ''; } catch { return ''; } },
-    set: v => { try { v ? localStorage.setItem(TOKEN_KEY, v) : localStorage.removeItem(TOKEN_KEY); } catch {} },
+    get: () => { try { return localStorage.getItem(PW_KEY) || ''; } catch { return ''; } },
+    set: v => { try { v ? localStorage.setItem(PW_KEY, v) : localStorage.removeItem(PW_KEY); } catch {} },
 };
-$('token').value = store.get();
-if (!store.get()) $('tokenBox').open = true;
-$('token').addEventListener('change', () => { store.set($('token').value.trim()); refreshButtons(); });
-$('forget').addEventListener('click', () => { store.set(''); $('token').value = ''; refreshButtons(); });
+const pwMsg = (text, cls = '') => { $('pwMsg').textContent = text; $('pwMsg').className = `cookie-msg ${cls}`; };
+$('pw').value = store.get();
+if (!store.get()) $('pwBox').open = true;
+$('pw').addEventListener('change', () => { store.set($('pw').value); refreshButtons(); });
+$('forget').addEventListener('click', () => { store.set(''); $('pw').value = ''; pwMsg(''); refreshButtons(); });
+$('pwCheck').addEventListener('click', async () => {
+    store.set($('pw').value);
+    refreshButtons();
+    try {
+        await post({ file: 'check' });
+        pwMsg('맞아요. 이제 저장할 수 있어요.', 'ok');
+    } catch (e) {
+        pwMsg(e.message, 'err');
+    }
+});
+
+// 서버에 보내고 오류면 그 문구로 던진다
+async function post(body) {
+    const res = await fetch('../api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: store.get(), ...body }) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `서버 ${res.status}`);
+    return data;
+}
 
 let state = { events: [], offAir: new Set(), header: '', sha: '' };
 let weekOffset = 0;
@@ -135,21 +149,16 @@ let dirty = false;
 let loading = false;
 
 const status = (text, cls = '') => { $('status').textContent = text; $('status').className = `status ${cls}`; };
-const authHeaders = () => (store.get() ? { Authorization: `Bearer ${store.get()}` } : {});
-
-// GitHub이 주는 base64는 UTF-8 바이트다
-const fromB64 = b64 => new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/\s/g, '')), c => c.charCodeAt(0)));
-const toB64 = text => btoa(Array.from(new TextEncoder().encode(text), b => String.fromCharCode(b)).join(''));
 
 async function load() {
     loading = true;
     refreshButtons();
     status('불러오는 중…');
     try {
-        const res = await fetch(`${API}?ref=main&t=${Date.now()}`, { headers: { Accept: 'application/vnd.github+json', ...authHeaders() }, cache: 'no-store' });
-        if (!res.ok) throw new Error(`GitHub ${res.status}`);
-        const data = await res.json();
-        const text = fromB64(data.content);
+        const res = await fetch(`../api/save?t=${Date.now()}`, { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `서버 ${res.status}`);
+        const text = data.content || '';
         const parsed = parseSchedule(text, Date.now());
         // 맨 위 설명(# 줄)은 그대로 두고 일정만 고쳐 쓴다
         const header = [];
@@ -261,30 +270,35 @@ function cleanState() {
     return { events: state.events.filter(e => String(e.text).trim()), offAir: state.offAir };
 }
 
-function preview() {
-    const days = weekSchedule(cleanState(), currentNow());
-    const frame = $('preview');
-    frame.onload = () => {
-        const doc = frame.contentDocument;
-        const fit = () => {
-            const h = doc.documentElement.scrollHeight;
-            const scale = Math.min(1, $('previewBox').clientWidth / 640);
-            frame.style.height = `${h}px`;
-            frame.style.transform = `scale(${scale})`;
-            $('previewBox').style.height = `${h * scale}px`;
-        };
-        fit();
-        doc.fonts?.ready.then(fit);
-        [...doc.images].forEach(img => img.addEventListener('load', fit));
-    };
-    frame.srcdoc = scheduleBadgeHtml({ name: config.name, soopId: config.soopId, days, today: kstToday(Date.now()), footer: config.schedule?.footer });
+// 저장 전 일정을 서버에 보내 실제 뱃지와 같은 그림을 받는다(마지막 요청만 반영)
+let previewSeq = 0;
+let previewUrl = '';
+async function preview() {
+    const seq = ++previewSeq;
+    $('preview').classList.add('busy');
+    try {
+        const res = await fetch('../api/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: serializeSchedule(cleanState()), now: currentNow() }),
+        });
+        if (!res.ok || seq !== previewSeq) return;
+        const url = URL.createObjectURL(await res.blob());
+        if (seq !== previewSeq) return URL.revokeObjectURL(url);
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        previewUrl = url;
+        $('preview').src = url;
+    } catch {
+        // 미리보기는 실패해도 편집은 계속된다
+    } finally {
+        if (seq === previewSeq) $('preview').classList.remove('busy');
+    }
 }
-addEventListener('resize', () => $('preview').onload?.());
 
 function refreshButtons() {
     const bad = state.events.some(e => e.bad);
-    $('save').disabled = loading || !dirty || bad || !store.get() || !state.sha;
-    $('save').title = !store.get() ? '아래 "저장 권한"에서 토큰을 먼저 넣어 주세요' : bad ? '빨간 시간 칸을 고쳐 주세요' : '';
+    $('save').disabled = loading || !dirty || bad || !store.get();
+    $('save').title = !store.get() ? '아래 "편집 비밀번호"를 먼저 넣어 주세요' : bad ? '빨간 시간 칸을 고쳐 주세요' : '';
 }
 
 $('save').addEventListener('click', async () => {
@@ -292,17 +306,8 @@ $('save').addEventListener('click', async () => {
     status('저장 중…');
     try {
         const text = serializeSchedule(cleanState(), state.header);
-        const res = await fetch(API, {
-            method: 'PUT',
-            headers: { Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', ...authHeaders() },
-            body: JSON.stringify({ message: '일정 수정(편집 화면)', content: toB64(text), sha: state.sha, branch: 'main' }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (res.status === 401) throw new Error('토큰이 맞지 않거나 만료됐습니다. 저장 권한에서 다시 넣어 주세요');
-        if (res.status === 403 || res.status === 404) throw new Error('토큰에 ststats/badges의 Contents 쓰기 권한이 없습니다');
-        if (res.status === 409 || res.status === 422) throw new Error('그사이 다른 곳에서 일정이 바뀌었습니다. 다시 불러온 뒤 고쳐 주세요');
-        if (!res.ok) throw new Error(data.message || `GitHub ${res.status}`);
-        state.sha = data.content.sha;
+        const data = await post({ file: 'schedule', content: text, sha: state.sha });
+        state.sha = data.sha;
         state.events = cleanState().events;
         dirty = false;
         render();
@@ -322,7 +327,7 @@ addEventListener('beforeunload', e => { if (dirty) e.preventDefault(); });
 
 load();
 
-// SOOP 쿠키 상태(Vercel에서만 있음, GitHub Pages 판에서는 조용히 넘어간다)
+// SOOP 쿠키 상태
 const COOKIE_TEXT = {
     error: '⚠️ SOOP 쿠키가 만료됐거나 잘못됐어요. 즐겨찾기 전용 글이 뱃지에 안 나와요. 아래 "SOOP 쿠키 바꾸기"에서 새 쿠키를 넣어 주세요.',
     stale: '⚠️ 즐겨찾기 전용 글이 하나도 안 보여요. SOOP 쿠키가 만료됐을 수 있어요. 아래 "SOOP 쿠키 바꾸기"에서 새 쿠키를 넣어 주세요.',
@@ -332,7 +337,6 @@ fetch('../status.json', { cache: 'no-store' })
     .then(r => (r.ok ? r.json() : null))
     .then(st => {
         if (!st || !st.state) return;
-        $('cookieBox').hidden = false; // Vercel 판에서만 쿠키를 바꿀 수 있다
         if (st.state !== 'ok') $('cookieBox').open = true;
         if (st.state === 'unknown') return;
         const box = $('cookie');
@@ -347,29 +351,15 @@ fetch('../status.json', { cache: 'no-store' })
     })
     .catch(() => {});
 
-const COOKIE_FILE_API = `https://api.github.com/repos/${REPO}/contents/cookie.enc`;
 $('cookieSave').addEventListener('click', async () => {
     const msg = (text, cls = '') => { $('cookieMsg').textContent = text; $('cookieMsg').className = `cookie-msg ${cls}`; };
-    if (!store.get()) return msg('위 "저장 권한"에 GitHub 토큰을 먼저 넣어 주세요.', 'err');
+    if (!store.get()) return msg('위 "편집 비밀번호"를 먼저 넣어 주세요.', 'err');
     const cookie = $('cookieInput').value.trim();
     if (!cookie) return msg('쿠키를 붙여 넣어 주세요.', 'err');
     $('cookieSave').disabled = true;
     try {
-        msg('SOOP에서 이 쿠키가 먹는지 확인하는 중…');
-        const res = await fetch('../api/cookie', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cookie }) });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || `서버 ${res.status}`);
-        msg('암호화해서 저장소에 올리는 중…');
-        const head = await fetch(`${COOKIE_FILE_API}?ref=main&t=${Date.now()}`, { headers: { Accept: 'application/vnd.github+json', ...authHeaders() }, cache: 'no-store' });
-        const sha = head.ok ? (await head.json()).sha : undefined;
-        const put = await fetch(COOKIE_FILE_API, {
-            method: 'PUT',
-            headers: { Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', ...authHeaders() },
-            body: JSON.stringify({ message: 'SOOP 쿠키 바꿈(편집 화면, 암호문)', content: toB64(data.enc), sha, branch: 'main' }),
-        });
-        if (put.status === 401) throw new Error('GitHub 토큰이 맞지 않거나 만료됐습니다');
-        if (put.status === 403 || put.status === 404) throw new Error('GitHub 토큰에 ststats/badges의 Contents 쓰기 권한이 없습니다');
-        if (!put.ok) throw new Error(`GitHub ${put.status}`);
+        msg('SOOP에서 이 쿠키가 먹는지 확인하고 저장하는 중…');
+        const data = await post({ file: 'cookie', cookie });
         $('cookieInput').value = '';
         msg(data.extraCount
             ? `저장했어요. 즐겨찾기 전용 글 ${data.extraCount}개가 보이는 쿠키예요. 1~2분 뒤 뱃지에 적용돼요.`

@@ -73,6 +73,7 @@ export async function checkCookie(cookie) {
 
 let lastCookieError = '';
 let boardCache = { at: 0, request: null };
+let lastGoodBoard = null;
 async function cachedBoard() {
     if (boardCache.request && Date.now() - boardCache.at < 30000) return boardCache.request;
     const { cookie } = await currentCookie();
@@ -88,9 +89,20 @@ async function cachedBoard() {
               }
           )
         : fetchBoard('');
-    boardCache = { at: Date.now(), request };
-    request.catch(() => { if (boardCache.request === request) boardCache = { at: 0, request: null }; });
-    return request;
+    // SOOP이 잠깐 안 되면 직전에 받은 목록을 6시간까지 대신 쓴다(커뮤니티에 깨진 이미지가 뜨지 않게)
+    const guarded = request.then(
+        posts => ((lastGoodBoard = { at: Date.now(), posts }), posts),
+        e => {
+            if (lastGoodBoard && Date.now() - lastGoodBoard.at < 6 * 3600 * 1000) {
+                console.error('SOOP 게시판 실패, 직전 목록을 씁니다:', e.message);
+                return lastGoodBoard.posts;
+            }
+            throw e;
+        }
+    );
+    boardCache = { at: Date.now(), request: guarded };
+    guarded.catch(() => { if (boardCache.request === guarded) boardCache = { at: 0, request: null }; });
+    return guarded;
 }
 
 export const recentPosts = () => cachedBoard().then(posts => posts.slice(0, config.noticeCount));

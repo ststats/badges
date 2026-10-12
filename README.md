@@ -16,13 +16,23 @@
 
 ## 구조
 
-- **Vercel 함수**(`api/img.js`, `api/go.js`): `/notice-1.png`로 요청이 오면 SOOP 게시판을 읽고(30초 기억)
-  그림에 나오는 내용의 해시를 붙인 `/notice-1.<해시>.png`로 보냅니다(CDN 1분). 해시 주소는 `src/render.mjs`가
-  satori + resvg로 **한 번만** 그리고 CDN이 계속 씁니다. 내용이 바뀔 때만 그려서 Vercel 무료 한도
-  (Active CPU 월 4시간, 스타유니브·시너지와 같은 계정 합산)를 거의 쓰지 않습니다.
-  프로필(움직이는 GIF)·사진은 sharp로 줄여 넣고, 머리 배경은 프로필을 미리 흐려 만듭니다. 이모지는 Twemoji.
-- **정적 파일**(`public/`, 배포 때 `scripts/vercel-public.mjs`가 만듦): 일정 편집 화면 `/edit/`, 코드 모음 `/`.
-- **일정**은 저장소의 `schedule.txt`. 편집 화면에서 저장하면 커밋되고 Vercel이 다시 배포합니다(1분 남짓).
+- **뱃지 그림**(`api/img.js`): `/notice-1.png`로 요청이 오면 SOOP 게시판을 읽고(30초 기억) 그림에 나오는 내용의
+  해시를 붙인 `/notice-1.<해시>.png`로 보냅니다(CDN 1분). 해시 주소는 `src/render.mjs`가 satori + resvg로 **한 번만**
+  그리고 CDN이 계속 씁니다. 내용이 바뀔 때만 그려서 Vercel 무료 한도(Active CPU 월 4시간, 스타유니브·시너지와 합산)를
+  거의 쓰지 않습니다. SOOP이 잠깐 안 되면 직전 목록을 6시간까지 대신 써서 깨진 이미지가 뜨지 않습니다.
+- **편집 화면**(`/edit/`, `src/edit.html`): 읽기·저장은 `api/save.js`(비밀번호 확인 후 서버의 GitHub 토큰으로 커밋),
+  미리보기는 `api/preview.js`(실제 뱃지와 같은 그림을 SVG로, 그림 변환을 건너뛰어 빠름).
+- **일정**은 `schedule.txt`, **쿠키**는 `cookie.enc`(암호문). 저장하면 커밋되고 Vercel이 다시 배포합니다(1~2분).
+- `src/lib.mjs`는 글 목록·일정 처리(서버와 편집 화면이 같이 씀), `src/live.mjs`는 SOOP 읽기·쿠키.
+
+### Vercel 환경 변수
+
+| 이름 | 내용 |
+|---|---|
+| `EDIT_PASSWORD` | 편집 화면 비밀번호(4자 이상) |
+| `GITHUB_TOKEN` | `ststats/badges` Contents: Read and write 토큰(서버가 대신 커밋) |
+| `COOKIE_KEY` | 쿠키 암호화 열쇠(16자 이상, 바꾸면 편집 화면에서 쿠키를 다시 저장) |
+| `SOOP_COOKIE` | (선택, 예비) `cookie.enc`가 없을 때 쓰는 쿠키 |
 
 ### Vercel 연결(처음 한 번)
 
@@ -37,9 +47,8 @@
 본인 SOOP 로그인 쿠키로 게시판을 읽으면 뱃지에 즐겨찾기 전용 글도 나옵니다.
 **뱃지 주소를 아는 사람은 누구나 그 글을 보게 되니** 커뮤니티 등에 올릴 때는 쿠키를 빼세요.
 
-- **처음 한 번:** Vercel → Settings → Environment Variables에 `COOKIE_KEY`(16자 이상 아무 긴 문자열)를 넣고 Redeploy.
-- **쿠키 넣기·바꾸기:** 편집 화면(`/edit/`)의 **SOOP 쿠키 바꾸기**에 붙여 넣고 저장. 서버가 SOOP에서 먹히는지 먼저 보고,
-  `COOKIE_KEY`로 암호화한 `cookie.enc`를 편집 화면이 커밋합니다(저장소에는 암호문만, 1~2분 뒤 적용).
+- **쿠키 넣기·바꾸기:** 편집 화면의 **SOOP 쿠키 바꾸기**에 붙여 넣고 저장(편집 비밀번호 필요). 서버가 SOOP에서 먹히는지
+  먼저 보고, `COOKIE_KEY`로 암호화해 `cookie.enc`로 커밋합니다(저장소에는 암호문만, 1~2분 뒤 적용).
   쿠키 얻기: PC 크롬에서 로그인한 채로 소주양 게시판 → F12 → Network → 새로고침 → `board` 요청 → Request Headers의 **cookie** 값 전체.
 - 편집 화면 맨 위에 쿠키 상태가 나오고, 만료가 의심되면(즐겨찾기 글이 하나도 안 보이면) 빨간 알림이 뜹니다.
   `/status`에서 자세히 볼 수 있습니다.
@@ -47,15 +56,14 @@
 
 ## 일정 적기
 
-**편집 화면: `<vercel 주소>/edit/`** (휴대폰에서도 됩니다. `https://ststats.github.io/badges/edit/`도 같은 화면)
+**편집 화면: https://staruniv-badges.vercel.app/edit/** (휴대폰에서도 됩니다)
 
 요일마다 `+ 일정 추가`로 시간·내용을 적고, 쉬는 날은 `휴방`을 체크한 뒤 **저장**. 1~2분 뒤 뱃지가 바뀝니다.
 오른쪽(휴대폰은 아래)에 뱃지 미리보기가 바로 보이고, `다음 주 ›`로 미리 적어 둘 수 있습니다(뱃지에는 늘 이번 주만).
 
 - 시간은 `20:00`(또는 `2000`, `20시`), 모르면 `미정`, 비우면 시간 없이 나옵니다.
-- 처음 한 번 **저장 권한**에서 GitHub 토큰을 넣어야 합니다(화면에 만드는 법이 있습니다:
-  ststats/badges만, Contents: Read and write). 토큰은 그 브라우저에만 기억됩니다.
-- 저장하면 화면이 저장소의 [`schedule.txt`](schedule.txt)를 고쳐 커밋합니다. 그 파일을 GitHub에서 직접 고쳐도 됩니다
+- 처음 한 번 **편집 비밀번호**를 넣으면 그 브라우저에 기억됩니다.
+- 저장하면 서버가 저장소의 [`schedule.txt`](schedule.txt)를 고쳐 커밋합니다. 그 파일을 GitHub에서 직접 고쳐도 됩니다
   (한 줄에 `날짜 [시간] 내용`, 내용이 `휴방`이면 휴방).
 
 ## 최근 글
@@ -66,15 +74,15 @@ SOOP 방송국 게시판 첫 쪽에서 소주양 본인 글(고정 공지 포함
 
 대상·링크 등은 `config.json`에서 바꿉니다.
 
-## GitHub Pages 판(예전 방식)
+## GitHub Pages 판(그만둠)
 
-`.github/workflows/build.yml`이 5분마다 크롬으로 찍어 `https://ststats.github.io/badges/`에 올리는 예전 방식도
-아직 돌아갑니다(커뮤니티 코드를 Vercel 주소로 바꾸기 전까지). 다 바꾸면 이 워크플로의 `schedule`을 지우면 됩니다.
+예전에는 GitHub Actions가 5분마다 크롬으로 찍어 `https://ststats.github.io/badges/`에 올렸습니다. 지금은 꺼서
+마지막으로 배포된 그림이 그대로 남아 있습니다(더 바뀌지 않음). Actions는 테스트만 돌립니다.
 
 ## 로컬에서
 
 ```sh
 npm ci
 npm test
-npm run dev        # http://localhost:3000 (vercel.json 경로를 흉내 낸 서버)
+EDIT_PASSWORD=… GITHUB_TOKEN=… COOKIE_KEY=… npm run dev   # http://localhost:3000 (vercel.json 경로를 흉내 낸 서버)
 ```
