@@ -13,6 +13,7 @@
   "dependencies": {
     "@resvg/resvg-js": "2.6.2",
     "@vercel/functions": "3.9.11",
+    "jose": "6.2.12",
     "sanitize-html": "2.18.0",
     "satori": "0.47.1",
     "sharp": "0.34.4"

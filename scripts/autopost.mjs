@@ -1,7 +1,7 @@
 import { chromium } from 'playwright';
 import { config } from '../src/config.mjs';
-import { currentCookie } from '../src/live.mjs';
-import { collectPosts, coolingDown, newPosts, publishPosts } from '../src/autopost.mjs';
+import { coolingDown, newPosts, publishPosts } from '../src/autopost.mjs';
+import { vercelPosts } from '../src/autopost-source.mjs';
 import { githubState } from '../src/autopost-state.mjs';
 import { ygosuPublisher } from '../src/ygosu-publisher.mjs';
 
@@ -13,9 +13,8 @@ async function main() {
     if (state?.pending) newPosts(state, []);
     if (state && coolingDown(state)) { console.log('최근 등록 후 5분 이내: 이번 실행은 건너뜁니다'); return; }
     const started = Date.now();
-    const cookie = process.env.SOOP_COOKIE || await currentCookie();
     console.log('SOOP 공개/즐겨찾기 글 수집 및 접근 확인');
-    const posts = await collectPosts({ soopId: config.soopId, cookie, since: state?.since });
+    const posts = await vercelPosts(state?.since);
     if (!state) {
         state = { version: 1, since: started, done: Object.fromEntries(posts.map(p => [String(p.titleNo), 'baseline'])) };
         await store.save(state);
