@@ -1,6 +1,6 @@
 // 뱃지 그림. 주소는 /<대상>/<뱃지>.png (vercel.json이 ?t=대상&b=뱃지로 보낸다)
 //   소주양:     /soju/notice-1.png ~ notice-3.png, /soju/schedule.png
-//   스타유니브: /staruniv/schedule.png(이번 주), /staruniv/calendar.png(이번 달)
+//   캄몬스타즈(스타유니브): /staruniv/today.png(오늘의 일정), /staruniv/calendar.png(이번 달)
 // 그리는 데 CPU가 들어서(Vercel 무료 한도: 월 4시간) 내용이 바뀔 때만 그린다.
 //   /soju/notice-1.png         → 지금 내용의 해시를 붙인 /soju/notice-1.<해시>.png로 보낸다(CPU 거의 안 씀)
 //   /soju/notice-1.<해시>.png  → 한 번 그리고 CDN이 계속 쓴다(내용이 바뀌면 해시가 바뀌므로 오래 둬도 된다)
@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import { config } from '../src/config.mjs';
 import { noticeIndex, query } from '../src/http.mjs';
-import { kstToday, monthWeeks, parseSchedule, weekSchedule } from '../src/lib.mjs';
+import { eventsOn, kstToday, monthWeeks, parseSchedule, weekSchedule } from '../src/lib.mjs';
 import { recentPosts, scheduleFile } from '../src/live.mjs';
 import { starSchedule } from '../src/staruniv.mjs';
 
@@ -47,11 +47,11 @@ const BADGES = {
         },
     },
     staruniv: {
-        async schedule() {
+        async today() {
             const now = Date.now();
-            const { events } = await starSchedule();
-            const days = weekSchedule({ events, offAir: new Set() }, now);
-            return { args: { ...star, subtitle: '이번 주 일정', days, today: kstToday(now) }, draw: 'renderSchedule', fresh: 60 };
+            const date = kstToday(now);
+            const { events, offAir } = await starSchedule();
+            return { args: { ...star, date, events: eventsOn(events, date), offAir: offAir[date] || [] }, draw: 'renderToday', fresh: 60 };
         },
         async calendar() {
             const now = Date.now();

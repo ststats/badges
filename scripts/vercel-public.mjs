@@ -24,10 +24,10 @@ const groups = [
     {
         name: config.staruniv.name,
         badges: [
-            { img: 'staruniv/schedule.png', link: 'staruniv/s', label: '주간 일정' },
+            { img: 'staruniv/today.png', link: 'staruniv/s', label: '오늘의 일정' },
             { img: 'staruniv/calendar.png', link: 'staruniv/s', label: '이번 달 일정' },
         ],
-        note: '스타유니브 관리자 화면에서 일정을 고치면 1분 안에 바뀝니다.',
+        note: '스타유니브 관리자 화면에서 일정·휴방을 고치면 1분 안에 바뀝니다. 누르면 스타유니브 일정 페이지로 갑니다.',
     },
 ];
 await fs.writeFile(

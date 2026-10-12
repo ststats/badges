@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { monthWeeks, parseSchedule, weekSchedule } from '../src/lib.mjs';
-import { renderCalendar, renderNotice, renderSchedule } from '../src/render.mjs';
+import { renderCalendar, renderNotice, renderSchedule, renderToday } from '../src/render.mjs';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
 // 프로필 사진을 못 받아도(없는 ID) 그림은 나와야 한다
@@ -21,11 +21,12 @@ test('글 뱃지를 PNG로 그린다(글 없음 포함)', async () => {
     assert.deepEqual((await renderNotice({ name: '소주양', soopId, post: undefined, lines: 3 })).subarray(0, 4), PNG);
 });
 
-test('스타유니브 주간 일정·달력을 PNG로 그린다(로고를 못 받아도)', async () => {
+test('스타유니브 오늘의 일정·달력을 PNG로 그린다(로고·사진을 못 받아도)', async () => {
     const now = Date.parse('2026-10-12T03:00:00Z');
-    const events = [{ date: '2026-10-13', end: '2026-10-14', time: '20:00', who: '캄몬', text: '종겜', color: 'blue', order: 0 }];
-    const star = { name: '스타유니브', logo: 'http://127.0.0.1:9/none.webp' };
-    const days = weekSchedule({ events, offAir: new Set() }, now);
-    assert.deepEqual((await renderSchedule({ ...star, days, today: '2026-10-12' })).subarray(0, 4), PNG);
+    const events = [{ date: '2026-10-12', end: '2026-10-14', time: '20:00', who: '캄몬', text: '종겜', color: 'blue', order: 0 }];
+    const star = { name: '캄몬스타즈', logo: 'http://127.0.0.1:9/none.webp' };
+    const offAir = [{ soopId: 'no-such-user-for-test', name: '누구' }];
+    assert.deepEqual((await renderToday({ ...star, date: '2026-10-12', events, offAir })).subarray(0, 4), PNG);
+    assert.deepEqual((await renderToday({ ...star, date: '2026-10-12', events: [] })).subarray(0, 4), PNG);
     assert.deepEqual((await renderCalendar({ ...star, weeks: monthWeeks(now), events, holidays: ['2026-10-09'], today: '2026-10-12' })).subarray(0, 4), PNG);
 });

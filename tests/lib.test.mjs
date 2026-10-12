@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { monthWeeks, parseSchedule, postText, serializeSchedule, recentOwnPosts, weekDates, weekSchedule } from '../src/lib.mjs';
-import { starEvents } from '../src/staruniv.mjs';
+import { starEvents, starOffAir } from '../src/staruniv.mjs';
 
 test('이번 주는 한국 시간 월요일부터', () => {
     // 2026-10-11 15:30 UTC = 10-12(월) 00:30 KST
@@ -76,4 +76,9 @@ test('스타유니브 일정 행을 뱃지 일정으로', () => {
     ]);
     assert.deepEqual(a, { date: '2026-10-13', end: '2026-10-14', time: '', who: '캄몬', text: '비방연습', color: 'orange', order: 0 });
     assert.equal(b.time, '시간미정');
+});
+
+test('스타유니브 휴방은 날짜별 멤버 이름으로', () => {
+    const off = starOffAir([{ off_date: '2026-10-12', soop_id: 'a' }, { off_date: '2026-10-12', soop_id: 'b' }], [{ 'SOOP ID': 'a', 이름: '가나' }]);
+    assert.deepEqual(off, { '2026-10-12': [{ soopId: 'a', name: '가나' }, { soopId: 'b', name: 'b' }] });
 });

@@ -260,11 +260,24 @@ export async function renderNotice({ name, soopId, post, lines = 3, format = 'pn
             extra > 0 && h('div', { position: 'absolute', right: 6, bottom: 6, fontSize: 12.5, fontWeight: 800, color: '#fff', background: 'rgba(24,24,27,0.65)', borderRadius: 999, padding: '3px 8px' }, `+${extra}`)))));
 }
 
+// 일정 한 줄: [시간] [색 점 + 누가] 내용. timeCol이면 시간이 없어도 칸을 비워 둔다.
+const eventLine = (ev, timeCol) => {
+    const color = eventColor(ev.color);
+    const text = h('div', { fontSize: 16, fontWeight: 700, lineHeight: 1.4, wordBreak: 'keep-all' }, ev.text);
+    return h('div', { alignItems: 'baseline', gap: 12 },
+        timeCol && h('div', { width: 46, flexShrink: 0, fontSize: /^\d/.test(ev.time) ? 14 : 12.5, fontWeight: 700, color: /^\d/.test(ev.time) ? C.sub : C.faint }, ev.time === '시간미정' ? '미정' : ev.time || ' '),
+        ev.who
+            ? h('div', { flex: 1, alignItems: 'baseline', flexWrap: 'wrap', columnGap: 8 },
+                h('div', { alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 700, color: color?.text || C.sub },
+                    color && h('div', { width: 8, height: 8, borderRadius: 8, background: color.bar }), ev.who),
+                text)
+            : h('div', { flex: 1 }, text));
+};
+
 // 주간 일정. format: 'png'(뱃지) 또는 'svg'(편집 화면 미리보기: 그림으로 바꾸지 않아 훨씬 빠르다)
-// 일정에 who(누가)·color(색 이름)가 있으면 내용 앞에 색 점과 이름을 같이 쓴다(스타유니브).
-export async function renderSchedule({ name, soopId, logo, theme, subtitle = '이번 주 방송 일정', days, today, footer, format = 'png' }) {
-    const who = await profile({ soopId, logo, theme });
-    const head = scheduleHead(who, { name, subtitle, range: `${mmdd(days[0].date)} – ${mmdd(days[6].date)}`, square: !!logo });
+export async function renderSchedule({ name, soopId, theme, days, today, footer, format = 'png' }) {
+    const who = await profile({ soopId, theme });
+    const head = scheduleHead(who, { name, subtitle: '이번 주 방송 일정', range: `${mmdd(days[0].date)} – ${mmdd(days[6].date)}` });
     const rows = days.map(({ date, offAir, events }) => {
         const wd = weekdayOf(date);
         const isToday = date === today;
@@ -275,17 +288,7 @@ export async function renderSchedule({ name, soopId, logo, theme, subtitle = '�
         const items = [
             offAir && h('div', { alignSelf: 'flex-start', alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 700, color: C.sub, background: isToday ? '#fff' : C.tint, borderRadius: 999, padding: '5px 12px 5px 10px' }, img(MOON, 13, 13), '휴방'),
             // 그날 시간이 있는 일정이 하나라도 있으면 시간 칸을 비워서라도 맞춘다
-            ...events.map(ev => {
-                const color = eventColor(ev.color);
-                return h('div', { alignItems: 'baseline', gap: 12 },
-                    (ev.time || events.some(e => e.time)) && h('div', { width: 46, flexShrink: 0, fontSize: /^\d/.test(ev.time) ? 14 : 12.5, fontWeight: 700, color: /^\d/.test(ev.time) ? C.sub : C.faint }, ev.time === '시간미정' ? '미정' : ev.time || ' '),
-                    ev.who
-                        ? h('div', { flex: 1, alignItems: 'baseline', flexWrap: 'wrap', columnGap: 8 },
-                            h('div', { alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 700, color: color?.text || C.sub },
-                                color && h('div', { width: 8, height: 8, borderRadius: 8, background: color.bar }), ev.who),
-                            h('div', { fontSize: 16, fontWeight: 700, lineHeight: 1.4, wordBreak: 'keep-all' }, ev.text))
-                        : h('div', { flex: 1, fontSize: 16, fontWeight: 700, lineHeight: 1.4, wordBreak: 'keep-all' }, ev.text));
-            }),
+            ...events.map(ev => eventLine(ev, events.some(e => e.time))),
             !offAir && !events.length && h('div', { fontSize: 14, color: C.none }, '일정 없음'),
         ].filter(Boolean);
         return h('div', { alignItems: 'center', gap: 16, padding: '10px 12px', borderRadius: 16, marginTop: 2, background: isToday ? C.tint : 'transparent' },
@@ -294,6 +297,28 @@ export async function renderSchedule({ name, soopId, logo, theme, subtitle = '�
     return out(format, card(head,
         h('div', { flexDirection: 'column', padding: '8px 14px' }, rows),
         footer && h('div', { justifyContent: 'center', padding: '6px 0 20px' }, button(footer, true))));
+}
+
+// 오늘의 일정: 일정 목록 + 휴방 멤버(사진·이름, 없으면 '없음')
+export async function renderToday({ name, soopId, logo, theme, date, events, offAir = [], footer, format = 'png' }) {
+    const [who, ...avatars] = await Promise.all([
+        profile({ soopId, logo, theme }),
+        ...offAir.map(m => profileBuf(m.soopId).then(buf => thumbOf(`profile|${m.soopId}`, buf, 48))),
+    ]);
+    const head = scheduleHead(who, { name, subtitle: '오늘의 일정', range: `${mmdd(date)} (${weekdayOf(date)})`, square: !!logo });
+    const list = events.length
+        ? events.map(ev => eventLine(ev, events.some(e => e.time)))
+        : [h('div', { fontSize: 15, color: C.none }, '오늘 등록된 일정이 없습니다')];
+    const offRow = h('div', { alignItems: 'center', gap: 12, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.tint}` },
+        h('div', { alignItems: 'center', gap: 6, flexShrink: 0, fontSize: 13.5, fontWeight: 700, color: C.sub, background: C.tint, borderRadius: 999, padding: '5px 12px 5px 10px' }, img(MOON, 13, 13), '휴방'),
+        offAir.length
+            ? h('div', { flex: 1, flexWrap: 'wrap', gap: 8 },
+                offAir.map((m, i) => h('div', { alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 700, color: C.body },
+                    avatars[i] ? img(avatars[i], 24, 24, { borderRadius: 24 }) : h('div', { width: 24, height: 24, borderRadius: 24, background: C.tint }), m.name)))
+            : h('div', { fontSize: 14, color: C.none }, '없음'));
+    return out(format, card(head,
+        h('div', { flexDirection: 'column', gap: 10, padding: '20px 26px 20px' }, list, offRow),
+        footer && h('div', { justifyContent: 'center', padding: '0 0 20px' }, button(footer, true))));
 }
 
 // 이번 달 달력(일요일부터). 칸마다 일정 칩: 색 막대 + 시간·누가 + 내용. 너무 많으면 +N.
@@ -311,9 +336,12 @@ export async function renderCalendar({ name, soopId, logo, theme, weeks, events,
     const chip = ev => {
         const color = eventColor(ev.color) || { bar: C.faint, text: C.sub, bg: C.tint };
         const label = [ev.time === '시간미정' ? '미정' : ev.time, ev.who].filter(Boolean).join(' ');
-        return h('div', { flexDirection: 'column', borderRadius: 7, background: color.bg, borderLeft: `3px solid ${color.bar}`, padding: '3px 5px 4px 6px', flexShrink: 0 },
-            label && textBlock(label, { fontSize: 10.5, fontWeight: 700, color: color.text, lineHeight: 1.3, whiteSpace: 'nowrap', textOverflow: 'ellipsis' }),
-            ev.text && textBlock(ev.text, { fontSize: 11.5, fontWeight: 700, color: C.ink, lineHeight: 1.3, lineClamp: 2 }));
+        // 색 막대는 칩 안에 따로 세운다(둥근 칩에 왼쪽 테두리를 주면 막대가 휘어 보인다)
+        return h('div', { gap: 5, borderRadius: 7, background: color.bg, padding: '4px 6px 4px 4px', flexShrink: 0 },
+            h('div', { width: 3, borderRadius: 3, background: color.bar, flexShrink: 0 }),
+            h('div', { flex: 1, flexDirection: 'column', overflow: 'hidden' },
+                label && textBlock(label, { fontSize: 10.5, fontWeight: 700, color: color.text, lineHeight: 1.3, whiteSpace: 'nowrap', textOverflow: 'ellipsis' }),
+                ev.text && textBlock(ev.text, { fontSize: 11.5, fontWeight: 700, color: C.ink, lineHeight: 1.3, lineClamp: 2 })));
     };
     const cell = ({ date, inMonth }, i) => {
         const isToday = date === today;

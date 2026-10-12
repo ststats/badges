@@ -18,10 +18,26 @@ export function starEvents(rows) {
         });
 }
 
+// 휴방: 날짜별 멤버 [{soopId, name}] (이름은 멤버 목록에서, 없으면 SOOP ID)
+export function starOffAir(rows, members) {
+    const names = new Map((members || []).map(m => [m['SOOP ID'], m['이름']]));
+    const byDate = {};
+    for (const r of rows || []) if (r?.off_date && r.soop_id) (byDate[r.off_date] ||= []).push({ soopId: r.soop_id, name: names.get(r.soop_id) || r.soop_id });
+    return byDate;
+}
+
 export const starSchedule = keepFresh(
     async () => {
-        const [schedule, holidays] = await Promise.all([rpc('api_schedule', {}), rpc('api_holidays', {}).catch(() => ({}))]);
-        return { events: starEvents(schedule?.events), holidays: new Set(Object.keys(holidays || {}).filter(d => holidays[d])) };
+        const [schedule, holidays, members] = await Promise.all([
+            rpc('api_schedule', {}),
+            rpc('api_holidays', {}).catch(() => ({})),
+            rpc('api_site_members', {}).catch(() => ({})),
+        ]);
+        return {
+            events: starEvents(schedule?.events),
+            offAir: starOffAir(schedule?.offAir, members?.members),
+            holidays: new Set(Object.keys(holidays || {}).filter(d => holidays[d])),
+        };
     },
     { ms: 30000, label: '스타유니브 일정' }
 );
