@@ -1,10 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { collectPosts, newPosts, postingCandidates, publishPosts, postTime, articleBody, articleSubject } from '../src/autopost.mjs';
+import { collectPosts, newPosts, postingCandidates, publishPosts, postTime, articleBody, articleSubject, noticeCategoryCode } from '../src/autopost.mjs';
 import { fullContent, noticeDocument } from '../src/notice-document.mjs';
 
 const post = (id, date = '2026-10-12 12:00:00') => ({ titleNo: id, userId: 'soju2022', regDate: date, titleName: '제목', content: { content: '<p>전체 본문</p>' }, photos: [] });
 const state = () => ({ version: 1, since: postTime(post(1)) - 1000, done: {} });
+
+test('공지 카테고리는 같은 게시판의 실제 분류 링크에서만 읽는다', () => {
+    assert.equal(noticeCategoryCode([
+        { text: '공지', href: '/board/other/?s_category=Cwrong' },
+        { text: '공지사항', href: '/board/notice' },
+        { text: '공지', href: 'https://evil.example/board/pan_sojuyang/?s_category=Cwrong' },
+        { text: ' 공지 ', href: '/board/pan_sojuyang/?s_category=C6a50b533b88545.30004058' },
+    ]), 'C6a50b533b88545.30004058');
+    assert.throws(() => noticeCategoryCode([]), /카테고리/);
+});
 
 test('와고 제목은 원문 공지 날짜의 YYMMDD 소주양 공지 형식이다', () => {
     assert.equal(articleSubject(post(1)), '261012 소주양 공지');
