@@ -37,7 +37,8 @@ SOOP 쿠키가 만료되면 기존 상태 화면에서 갱신합니다.
 1. 코드를 main에 병합하고 Vercel 배포 성공을 확인합니다.
 2. Supabase SQL Editor에서 `supabase/autopost.sql`을 실행합니다.
 3. GitHub Variable `AUTOPOST_ENABLED=true`를 설정하고 **소주양 공지 자동 등록**을 한 번 수동 실행합니다.
-   최초 실행은 현재 글을 기준으로 기록하며 과거 공지를 올리지 않습니다. 이 초기화를 감지 활성화보다 먼저 완료해야 합니다.
+   최초 실행은 현재 글을 기준으로 기록한 뒤 **최신 공지 딱 하나를 등록**합니다. 나머지 과거 글은 올리지 않습니다.
+   이 초기 실행을 감지 활성화보다 먼저 완료해야 합니다.
 4. GitHub의 fine-grained PAT를 이 저장소만 선택하고 **Actions: Read and write** 권한으로 생성합니다.
    Vercel Production의 민감 환경 변수 `GITHUB_DISPATCH_TOKEN`에 저장합니다. 코드·Variables·채팅에 넣지 않습니다.
 5. Vercel Production에 `AUTOPOST_DETECT_ENABLED=true`를 설정하고 다시 배포합니다.
@@ -50,6 +51,9 @@ Supabase `ststat.sql`로 live-status cron을 다시 만들었다면 마지막 ti
 감지 호출도 멈추려면 기존 cron 명령에서 `badges-autopost-tick-v1` 블록만 제거합니다.
 
 ## 폭주·중복 방지
+
+이미 기준 저장을 마친 상태에서 등록 테스트하려면 수동 실행의 `publish_latest`를 켭니다.
+최신 글 하나만 대상으로 하며, 이미 등록한 글은 재등록하지 않습니다. pending과 5분 간격 제한도 유지합니다.
 
 최신 새 글 **딱 하나만** 등록합니다. 밀린 나머지 글은 건너뛰며 마지막 성공 등록 후 5분 이내 추가 등록하지 않습니다.
 Supabase 감지 상태에는 글 번호·시각·잠금만 저장하고 첫 감지는 기준 저장만 합니다.
