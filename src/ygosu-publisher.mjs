@@ -8,6 +8,11 @@ export async function ygosuPublisher(browser, { id, password, log = () => {} }) 
     if (!id || !password) throw new Error('YGOSU_ID와 YGOSU_PASSWORD Secrets가 필요합니다');
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const page = await context.newPage();
+    let draftDismissed = false;
+    page.on('dialog', async dialog => {
+        if (/임시\s*저장된\s*글/.test(dialog.message())) draftDismissed = true;
+        await dialog.dismiss();
+    });
     page.setDefaultTimeout(30000);
     await page.goto(`https://ygosu.com/board/${BOARD}`, { waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => typeof YG_LOGIN_API !== 'undefined' && typeof YG_LOGIN_SESSION !== 'undefined');
@@ -29,8 +34,19 @@ export async function ygosuPublisher(browser, { id, password, log = () => {} }) 
             log('전체 공지 캡처');
             const images = await captureNotice(browser, html);
             log('와고 글쓰기 폼 확인');
+            const draftLookup = page.waitForResponse(response => response.url().includes('/action.yg')
+                && String(response.request().postData()).includes('get_auto_save'), { timeout: 10000 }).catch(() => null);
             await page.goto(`https://ygosu.com/board/${BOARD}/?mode=write`, { waitUntil: 'domcontentloaded' });
             await page.waitForFunction(() => typeof YG_BOARD !== 'undefined' && typeof STORAGE !== 'undefined' && document.querySelector('form[name="writeform"]'));
+            const lookupResponse = await draftLookup;
+            const lookup = lookupResponse ? await lookupResponse.json().catch(() => null) : null;
+            if (lookup?.msg === 'SUCCESS' && !draftDismissed) {
+                log('임시 저장 글 불러오기 취소');
+                const modal = page.locator('dialog[open], [role="dialog"], [role="alertdialog"]')
+                    .filter({ hasText: /임시\s*저장된\s*글/ }).first();
+                await modal.getByRole('button', { name: '취소', exact: true }).click();
+                await modal.waitFor({ state: 'hidden' });
+            }
             const parent = await page.evaluate(board => {
                 const form = document.querySelector('form[name="writeform"]');
                 const ctx = YG_BOARD.getV3ArticleWriteContext(form);
