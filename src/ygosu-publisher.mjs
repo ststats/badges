@@ -4,7 +4,7 @@ import { profile } from './render.mjs';
 import { captureNotice, noticeDocument } from './notice-document.mjs';
 import { createHash } from 'node:crypto';
 
-export async function ygosuPublisher(browser, { id, password }) {
+export async function ygosuPublisher(browser, { id, password, log = () => {} }) {
     if (!id || !password) throw new Error('YGOSU_ID와 YGOSU_PASSWORD Secrets가 필요합니다');
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const page = await context.newPage();
@@ -22,9 +22,13 @@ export async function ygosuPublisher(browser, { id, password }) {
     return {
         close: () => context.close(),
         async prepare(post) {
+            log('프로필 준비');
             const who = await profile({ soopId: config.soopId, theme: config.theme });
+            log('전체 본문 문서 준비');
             const html = await noticeDocument({ name: config.name, post, ...who });
+            log('전체 공지 캡처');
             const images = await captureNotice(browser, html);
+            log('와고 글쓰기 폼 확인');
             await page.goto(`https://ygosu.com/board/${BOARD}/?mode=write`, { waitUntil: 'domcontentloaded' });
             await page.waitForFunction(() => typeof YG_BOARD !== 'undefined' && typeof STORAGE !== 'undefined' && document.querySelector('form[name="writeform"]'));
             const parent = await page.evaluate(board => {
@@ -45,6 +49,7 @@ export async function ygosuPublisher(browser, { id, password }) {
                 throw new Error('와고 첨부 부모 코드를 확인할 수 없습니다');
             }, BOARD);
             const uploads = [];
+            log('와고 이미지 업로드');
             for (let i = 0; i < images.length; i++) {
                 const result = await page.evaluate(async ({ base64, parent, name }) => {
                     const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
