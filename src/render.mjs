@@ -201,10 +201,8 @@ const eventColor = name => {
 
 // 색은 머리 배경에만 쓰고, 버튼·NEW·오늘 칸은 회색 바탕에 진한 글자로 차분하게
 // 카드 오른쪽 아래 버튼(원글 보기·방송국 가기). 모든 뱃지에서 같은 크기·자리.
-// note가 있으면 왼쪽에 작게(글이 잘렸을 때 '… 이어서 더 있어요').
-const cornerButton = (label, note) =>
-    h('div', { justifyContent: note ? 'space-between' : 'flex-end', alignItems: 'center', padding: '0 22px 20px' },
-        note && h('div', { fontSize: 13, fontWeight: 600, color: C.faint }, note),
+const cornerButton = label =>
+    h('div', { justifyContent: 'flex-end', padding: '0 22px 20px' },
         h('div', { alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, borderRadius: 999, padding: '8px 14px 8px 16px', background: C.tint, color: C.ink },
             label, img(ARROW(C.ink), 12, 12)));
 
@@ -216,12 +214,12 @@ const lineCount = (text, fontSize, width) =>
     text.split('\n').reduce((n, p) => n + Math.max(1, Math.ceil(([...p].reduce((w, c) => w + charWidth(c), 0) * fontSize) / width)), 0);
 
 // satori는 keep-all과 줄바꿈을 같이 쓰면 줄바꿈을 버린다. 문단마다 따로 그리고 높이로 lines줄에서 자른다.
-// 잘리면(cut) 마지막 줄을 흐리게 덮어 이어진다는 걸 보여 준다.
+// 잘리면(cut) 마지막 줄을 아래로 갈수록 옅게 덮어 이어진다는 걸 보여 준다.
 function paragraphs(text, { lines, cut, fontSize, lineHeight, color, marginTop }) {
     const lh = Math.round(fontSize * lineHeight * 10) / 10;
     return h('div', { flexDirection: 'column', position: 'relative', maxHeight: lh * lines, overflow: 'hidden', marginTop },
         text.split('\n').map(p => (p.trim() ? textBlock(p, { fontSize, lineHeight: `${lh}px`, color, flexShrink: 0 }) : h('div', { height: lh, flexShrink: 0 }))),
-        cut && h('div', { position: 'absolute', left: 0, right: 0, top: lh * (lines - 1), height: lh, backgroundImage: 'linear-gradient(90deg, rgba(255,255,255,0) 40%, #fff 100%)' }));
+        cut && h('div', { position: 'absolute', left: 0, right: 0, top: lh * (lines - 1), height: lh, backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.15), rgba(255,255,255,0.75))' }));
 }
 
 // lines가 3보다 크면 최신 글(본문을 길게, 사진을 아래에 크게), 아니면 사진 한 장을 오른쪽에 작게
@@ -256,7 +254,6 @@ export async function renderNotice({ name, soopId, theme, post, lines = 3, forma
     const fontSize = featured ? 15 : 14;
     const cut = !!text && lineCount(text, fontSize, featured ? CARD_W - 48 : CARD_W - 40 - (photosAll.length ? 116 : 0)) > maxLines;
     const body = text && paragraphs(text, { lines: maxLines, cut, fontSize, lineHeight: featured ? 1.68 : 1.6, color: C.body, marginTop: featured ? 10 : 6 });
-    const cutNote = cut ? '… 이어서 더 있어요' : null;
     const more = n => n > 0 && h('div', { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', background: 'rgba(24,24,27,0.5)', color: '#fff', fontSize: 20, fontWeight: 800 }, `+${n}`);
 
     if (featured) {
@@ -266,14 +263,14 @@ export async function renderNotice({ name, soopId, theme, post, lines = 3, forma
             shown.length > 0 && h('div', { gap: 8, marginTop: 16 },
                 shown.map((src, i) => h('div', { position: 'relative', width: size, height: size, borderRadius: 14, overflow: 'hidden', background: C.tint },
                     img(src, size, size, { objectFit: 'cover' }), i === shown.length - 1 && more(extra))))),
-            cornerButton('원글 보기', cutNote)));
+            cornerButton('원글 보기')));
     }
     return out(format, card(head, h('div', { alignItems: 'center', gap: 16, padding: '16px 20px 12px' },
         h('div', { flex: 1, flexDirection: 'column' }, title, body),
         shown[0] && h('div', { position: 'relative', width: 100, height: 100, borderRadius: 16, overflow: 'hidden', background: C.tint },
             img(shown[0], 100, 100, { objectFit: 'cover' }),
             extra > 0 && h('div', { position: 'absolute', right: 6, bottom: 6, fontSize: 12.5, fontWeight: 800, color: '#fff', background: 'rgba(24,24,27,0.65)', borderRadius: 999, padding: '3px 8px' }, `+${extra}`))),
-        cornerButton('원글 보기', cutNote)));
+        cornerButton('원글 보기')));
 }
 
 // 일정 한 줄: [시간] [누가(일정 색 글자)] 내용. timeCol이면 시간이 없어도 칸을 비워 둔다.
