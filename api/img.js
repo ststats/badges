@@ -61,7 +61,7 @@ const BADGES = {
             const [first, last] = [weeks[0][0].date, weeks.at(-1)[6].date];
             return {
                 // 이번 달 칸에 걸치는 일정과 공휴일만 넣는다(다른 달 일정이 바뀌어도 다시 그리지 않게)
-                args: { ...who, footer: config.staruniv.footer, weeks, today: kstToday(now),
+                args: { ...who, weeks, today: kstToday(now),
                     events: events.filter(ev => ev.date <= last && (ev.end || ev.date) >= first),
                     holidays: [...holidays].filter(d => d >= first && d <= last).sort() },
                 draw: 'renderCalendar', fresh: 60,

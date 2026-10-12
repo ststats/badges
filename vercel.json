@@ -47,16 +47,6 @@
             "source": "/soju/s/",
             "destination": "https://www.sooplive.co.kr/station/soju2022",
             "permanent": false
-        },
-        {
-            "source": "/staruniv/s",
-            "destination": "https://staruniv.vercel.app/schedule/",
-            "permanent": false
-        },
-        {
-            "source": "/staruniv/s/",
-            "destination": "https://staruniv.vercel.app/schedule/",
-            "permanent": false
         }
     ]
 }

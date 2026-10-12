@@ -331,7 +331,7 @@ export async function renderToday({ name, soopId, logo, square, theme, date, eve
 
 // 이번 달 달력(일요일부터). 칸마다 일정 칩: 색 막대 + 시간·누가 + 내용. 너무 많으면 +N.
 const CAL_MAX = 6;
-export async function renderCalendar({ name, soopId, logo, square, theme, weeks, events, holidays = [], today, footer, format = 'png' }) {
+export async function renderCalendar({ name, soopId, logo, square, theme, weeks, events, holidays = [], today, format = 'png' }) {
     const who = await profile({ soopId, logo, theme });
     const month = weeks.flat().find(d => d.inMonth).date;
     const head = scheduleHead(who, { name, subtitle: '이번 달 일정', range: `${month.slice(0, 4)}년 ${Number(month.slice(5, 7))}월`, square });
@@ -361,10 +361,9 @@ export async function renderCalendar({ name, soopId, logo, square, theme, weeks,
             dayEvents.slice(0, CAL_MAX).map(chip),
             dayEvents.length > CAL_MAX && h('div', { fontSize: 11, fontWeight: 700, color: C.sub, paddingLeft: 4 }, `+${dayEvents.length - CAL_MAX}`));
     };
-    const grid = h('div', { flexDirection: 'column', padding: '0 14px 8px' },
+    const grid = h('div', { flexDirection: 'column', padding: '0 14px 14px' },
         weeks.map((week, wi) => h('div', { borderTop: wi ? `1px solid ${C.tint}` : 'none', padding: '2px 0' }, week.map(cell))));
-    return out(format, cardOf(CAL_W)(head, wdRow, grid,
-        footer && h('div', { justifyContent: 'center', padding: '6px 0 20px' }, button(footer, true))), CAL_W);
+    return out(format, cardOf(CAL_W)(head, wdRow, grid), CAL_W);
 }
 
 const toSvg = async (tree, width) => satori(tree, { width: width + 28, fonts: await loadFonts(), loadAdditionalAsset });

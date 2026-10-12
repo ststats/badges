@@ -9,7 +9,7 @@
 | 소주양 | 최근 글 1~3 | `/soju/notice-1.png` ~ `/soju/notice-3.png` | `/soju/n/1` ~ `/soju/n/3` → 지금의 그 글(SOOP 원글) |
 | 소주양 | 주간 일정(월~일) | `/soju/schedule.png` | `/soju/s` → 소주양 방송국 |
 | 캄몬스타즈 | 오늘의 일정(일정 + 휴방 멤버) | `/staruniv/today.png` | (링크 없음) |
-| 캄몬스타즈 | 이번 달 달력(일~토) | `/staruniv/calendar.png` | `/staruniv/s` → 스타유니브 일정 페이지 |
+| 캄몬스타즈 | 이번 달 달력(일~토) | `/staruniv/calendar.png` | (링크 없음) |
 
 붙여 넣을 코드는 Vercel 주소 첫 화면(**뱃지 모음**)에서 `코드 복사`로 받습니다. 예:
 
@@ -96,7 +96,7 @@ SOOP 방송국 게시판 첫 쪽에서 소주양 본인 글(고정 공지 포함
 ## 설정
 
 - 이름·글 수·줄 수·버튼 글자: `config.json` (`staruniv.name`은 팀 로고를 찾는 이름이기도 합니다)
-- 누르면 가는 곳(`/soju/s`, `/staruniv/s`): `vercel.json`의 `redirects`
+- 누르면 가는 곳(`/soju/s`): `vercel.json`의 `redirects`
 - 소주양 머리 배경은 프로필 사진에서 뽑은 두 색의 파스텔 그라데이션이고,
   `config.json`에 `"theme": {"from": "#e8eefc", "to": "#f3f0fb"}`처럼 넣으면 그 색으로 고정됩니다.
 
