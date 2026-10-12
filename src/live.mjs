@@ -23,7 +23,7 @@ export function decryptCookie(text) {
     return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString('utf8');
 }
 
-async function currentCookie() {
+export async function currentCookie() {
     if (!cookieKeyReady()) return '';
     const stored = (await getFile('cookie'))?.content;
     if (!stored) return '';
