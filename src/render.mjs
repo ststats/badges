@@ -5,7 +5,7 @@ import satori from 'satori';
 import sharp from 'sharp';
 import { Resvg } from '@resvg/resvg-js';
 import { config, root } from './config.mjs';
-import { formatPostDate, mmdd, postText, weekdayOf } from './lib.mjs';
+import { eventsOn, formatPostDate, mmdd, postText, weekdayOf } from './lib.mjs';
 
 let fontsPromise = null;
 const loadFonts = () =>
@@ -111,14 +111,14 @@ async function paletteOf(buf) {
     return { from: hsl2hex(a.h, sat(a.s), 0.87), to: hsl2hex(b.h, sat(b.s), 0.91) };
 }
 
+// 뱃지 주인: SOOP 프로필(soopId) 또는 로고 주소(logo). theme {from, to}가 있으면 사진 색 대신 그 색.
 const profiles = new Map();
-const profile = soopId =>
-    remember(profiles, soopId, async () => {
-        const buf = await profileBuf(soopId);
-        // config.json의 theme {from, to}가 있으면 사진 색 대신 그 색을 쓴다
-        const [avatar, colors] = await Promise.all([thumbOf(`profile|${soopId}`, buf, 120), config.theme || paletteOf(buf)]);
+const profile = ({ soopId, logo, theme }) =>
+    remember(profiles, logo || soopId, async () => {
+        const buf = logo ? await download(logo) : await profileBuf(soopId);
+        const [avatar, colors] = await Promise.all([thumbOf(`profile|${logo || soopId}`, buf, 120), theme || paletteOf(buf)]);
         return { avatar, colors };
-    }).then(v => v || { avatar: null, colors: config.theme || NEUTRAL });
+    }).then(v => v || { avatar: null, colors: theme || NEUTRAL });
 
 // 이모지는 Twemoji 그림으로 그린다(Pretendard에 없음)
 const emojis = new Map();
@@ -133,19 +133,20 @@ async function loadAdditionalAsset(code, segment) {
 }
 
 const CARD_W = 600;
-const card = (...children) =>
+const cardOf = width => (...children) =>
     h(
         'div',
         { padding: '10px 14px 18px', fontFamily: 'Pretendard', color: C.ink, letterSpacing: '-0.012em' },
         h(
             'div',
             {
-                width: CARD_W, flexDirection: 'column', background: '#fff', borderRadius: 22, overflow: 'hidden',
+                width, flexDirection: 'column', background: '#fff', borderRadius: 22, overflow: 'hidden',
                 boxShadow: '0 0 0 1px rgba(24,24,27,0.06), 0 2px 4px rgba(24,24,27,0.04), 0 8px 24px rgba(24,24,27,0.08)',
             },
             ...children
         )
     );
+const card = cardOf(CARD_W);
 
 // 머리: 프로필 색 파스텔 그라데이션 + 왼쪽 위 은은한 빛. 글자는 진하게.
 const hero = (colors, content) =>
@@ -159,10 +160,34 @@ const hero = (colors, content) =>
         content
     );
 
-const avatarImg = (avatar, size) =>
-    avatar
-        ? img(avatar, size, size, { borderRadius: size, border: '2.5px solid #fff', objectFit: 'cover', boxShadow: '0 2px 8px rgba(24,24,27,0.15)' })
-        : h('div', { width: size, height: size, borderRadius: size, background: 'rgba(255,255,255,0.7)' });
+// 사람 프로필은 동그랗게, 로고(square)는 둥근 네모로
+const avatarImg = (avatar, size, square) => {
+    const radius = square ? Math.round(size * 0.26) : size;
+    return avatar
+        ? img(avatar, size, size, { borderRadius: radius, border: '2.5px solid #fff', objectFit: 'cover', boxShadow: '0 2px 8px rgba(24,24,27,0.15)' })
+        : h('div', { width: size, height: size, borderRadius: radius, background: 'rgba(255,255,255,0.7)' });
+};
+
+// 일정·달력 머리: 사진 + 작은 제목 + 이름 + 오른쪽 기간 알약
+const scheduleHead = ({ avatar, colors }, { name, subtitle, range, square }) =>
+    hero(
+        colors,
+        h('div', { flex: 1, alignItems: 'center', gap: 14, padding: '24px 26px 22px' },
+            avatarImg(avatar, 52, square),
+            h('div', { flex: 1, flexDirection: 'column' },
+                h('div', { fontSize: 12.5, fontWeight: 600, color: C.sub }, subtitle),
+                h('div', { fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', marginTop: 3 }, name)),
+            h('div', { fontSize: 13, fontWeight: 700, color: C.body, background: 'rgba(255,255,255,0.7)', borderRadius: 999, padding: '7px 13px' }, range))
+    );
+
+// 스타유니브 일정 색(사이트 달력과 같은 이름). 글자는 진하게 섞어 읽기 좋게, 바탕은 아주 연하게.
+const EVENT_COLORS = { red: '#ff2538', orange: '#ff8a00', yellow: '#ffd43b', green: '#16c75b', blue: '#1677ff', indigo: '#3346b5', purple: '#7c3aed', light_gray: '#a1a1aa' };
+const rgbOf = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
+const mix = (a, b, t) => { const [x, y] = [rgbOf(a), rgbOf(b)]; return hex(...x.map((v, i) => v + (y[i] - v) * t)); };
+const eventColor = name => {
+    const base = EVENT_COLORS[name];
+    return base && { bar: base, text: mix(base, C.ink, 0.35), bg: mix(base, '#ffffff', 0.88) };
+};
 
 // 색은 머리 배경에만 쓰고, 버튼·NEW·오늘 칸은 회색 바탕에 진한 글자로 차분하게
 const button = (label, big) =>
@@ -192,7 +217,7 @@ export async function renderNotice({ name, soopId, post, lines = 3, format = 'pn
     const featured = Number(lines) > 3;
     const photosAll = (post?.photos || []).map(p => p?.url).filter(Boolean);
     const [{ avatar, colors }, ...photos] = await Promise.all([
-        profile(soopId),
+        profile({ soopId, theme: config.theme }),
         ...photosAll.slice(0, featured ? 4 : 1).map(u => thumb(u, 264)),
     ]);
     const shown = photos.filter(Boolean);
@@ -235,19 +260,11 @@ export async function renderNotice({ name, soopId, post, lines = 3, format = 'pn
             extra > 0 && h('div', { position: 'absolute', right: 6, bottom: 6, fontSize: 12.5, fontWeight: 800, color: '#fff', background: 'rgba(24,24,27,0.65)', borderRadius: 999, padding: '3px 8px' }, `+${extra}`)))));
 }
 
-// format: 'png'(뱃지) 또는 'svg'(편집 화면 미리보기: 그림으로 바꾸지 않아 훨씬 빠르다)
-export async function renderSchedule({ name, soopId, days, today, footer, format = 'png' }) {
-    const { avatar, colors } = await profile(soopId);
-    const head = hero(
-        colors,
-        h('div', { flex: 1, alignItems: 'center', gap: 14, padding: '24px 26px 22px' },
-            avatarImg(avatar, 52),
-            h('div', { flex: 1, flexDirection: 'column' },
-                h('div', { fontSize: 12.5, fontWeight: 600, color: C.sub }, '이번 주 방송 일정'),
-                h('div', { fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', marginTop: 3 }, name)),
-            h('div', { fontSize: 13, fontWeight: 700, color: C.body, background: 'rgba(255,255,255,0.7)', borderRadius: 999, padding: '7px 13px' },
-                `${mmdd(days[0].date)} – ${mmdd(days[6].date)}`))
-    );
+// 주간 일정. format: 'png'(뱃지) 또는 'svg'(편집 화면 미리보기: 그림으로 바꾸지 않아 훨씬 빠르다)
+// 일정에 who(누가)·color(색 이름)가 있으면 내용 앞에 색 점과 이름을 같이 쓴다(스타유니브).
+export async function renderSchedule({ name, soopId, logo, theme, subtitle = '이번 주 방송 일정', days, today, footer, format = 'png' }) {
+    const who = await profile({ soopId, logo, theme });
+    const head = scheduleHead(who, { name, subtitle, range: `${mmdd(days[0].date)} – ${mmdd(days[6].date)}`, square: !!logo });
     const rows = days.map(({ date, offAir, events }) => {
         const wd = weekdayOf(date);
         const isToday = date === today;
@@ -258,9 +275,17 @@ export async function renderSchedule({ name, soopId, days, today, footer, format
         const items = [
             offAir && h('div', { alignSelf: 'flex-start', alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 700, color: C.sub, background: isToday ? '#fff' : C.tint, borderRadius: 999, padding: '5px 12px 5px 10px' }, img(MOON, 13, 13), '휴방'),
             // 그날 시간이 있는 일정이 하나라도 있으면 시간 칸을 비워서라도 맞춘다
-            ...events.map(ev => h('div', { alignItems: 'baseline', gap: 12 },
-                (ev.time || events.some(e => e.time)) && h('div', { width: 46, flexShrink: 0, fontSize: /^\d/.test(ev.time) ? 14 : 12.5, fontWeight: 700, color: /^\d/.test(ev.time) ? C.sub : C.faint }, ev.time === '시간미정' ? '미정' : ev.time || ' '),
-                h('div', { flex: 1, fontSize: 16, fontWeight: 700, lineHeight: 1.4, wordBreak: 'keep-all' }, ev.text))),
+            ...events.map(ev => {
+                const color = eventColor(ev.color);
+                return h('div', { alignItems: 'baseline', gap: 12 },
+                    (ev.time || events.some(e => e.time)) && h('div', { width: 46, flexShrink: 0, fontSize: /^\d/.test(ev.time) ? 14 : 12.5, fontWeight: 700, color: /^\d/.test(ev.time) ? C.sub : C.faint }, ev.time === '시간미정' ? '미정' : ev.time || ' '),
+                    ev.who
+                        ? h('div', { flex: 1, alignItems: 'baseline', flexWrap: 'wrap', columnGap: 8 },
+                            h('div', { alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 700, color: color?.text || C.sub },
+                                color && h('div', { width: 8, height: 8, borderRadius: 8, background: color.bar }), ev.who),
+                            h('div', { fontSize: 16, fontWeight: 700, lineHeight: 1.4, wordBreak: 'keep-all' }, ev.text))
+                        : h('div', { flex: 1, fontSize: 16, fontWeight: 700, lineHeight: 1.4, wordBreak: 'keep-all' }, ev.text));
+            }),
             !offAir && !events.length && h('div', { fontSize: 14, color: C.none }, '일정 없음'),
         ].filter(Boolean);
         return h('div', { alignItems: 'center', gap: 16, padding: '10px 12px', borderRadius: 16, marginTop: 2, background: isToday ? C.tint : 'transparent' },
@@ -271,10 +296,46 @@ export async function renderSchedule({ name, soopId, days, today, footer, format
         footer && h('div', { justifyContent: 'center', padding: '6px 0 20px' }, button(footer, true))));
 }
 
-const toSvg = async tree => satori(tree, { width: CARD_W + 28, fonts: await loadFonts(), loadAdditionalAsset });
-const out = (format, tree) => (format === 'svg' ? toSvg(tree) : png(tree));
+// 이번 달 달력(일요일부터). 칸마다 일정 칩: 색 막대 + 시간·누가 + 내용. 너무 많으면 +N.
+const CAL_W = 780;
+const CAL_MAX = 6;
+export async function renderCalendar({ name, soopId, logo, theme, weeks, events, holidays = [], today, footer, format = 'png' }) {
+    const who = await profile({ soopId, logo, theme });
+    const month = weeks.flat().find(d => d.inMonth).date;
+    const head = scheduleHead(who, { name, subtitle: '이번 달 일정', range: `${month.slice(0, 4)}년 ${Number(month.slice(5, 7))}월`, square: !!logo });
+    const off = new Set(holidays);
+    const colW = (CAL_W - 28) / 7;
+    const wdRow = h('div', { padding: '12px 14px 4px' },
+        ['일', '월', '화', '수', '목', '금', '토'].map((wd, i) =>
+            h('div', { width: colW, justifyContent: 'center', fontSize: 12, fontWeight: 700, color: i === 0 ? C.red : i === 6 ? C.blue : C.sub }, wd)));
+    const chip = ev => {
+        const color = eventColor(ev.color) || { bar: C.faint, text: C.sub, bg: C.tint };
+        const label = [ev.time === '시간미정' ? '미정' : ev.time, ev.who].filter(Boolean).join(' ');
+        return h('div', { flexDirection: 'column', borderRadius: 7, background: color.bg, borderLeft: `3px solid ${color.bar}`, padding: '3px 5px 4px 6px', flexShrink: 0 },
+            label && textBlock(label, { fontSize: 10.5, fontWeight: 700, color: color.text, lineHeight: 1.3, whiteSpace: 'nowrap', textOverflow: 'ellipsis' }),
+            ev.text && textBlock(ev.text, { fontSize: 11.5, fontWeight: 700, color: C.ink, lineHeight: 1.3, lineClamp: 2 }));
+    };
+    const cell = ({ date, inMonth }, i) => {
+        const isToday = date === today;
+        const dayEvents = inMonth ? eventsOn(events, date) : [];
+        const numColor = !inMonth ? C.none : i === 0 || off.has(date) ? C.red : i === 6 ? C.blue : C.ink;
+        return h('div', { width: colW, minHeight: 92, flexDirection: 'column', gap: 4, padding: '6px 4px 8px', borderRadius: 12, background: isToday ? C.tint : 'transparent' },
+            h('div', { alignSelf: 'flex-start', justifyContent: 'center', minWidth: 26, height: 24, alignItems: 'center', borderRadius: 8, fontSize: 13, fontWeight: 800, color: numColor,
+                background: isToday ? '#fff' : 'transparent', boxShadow: isToday ? '0 0 0 1.5px rgba(24,24,27,0.12), 0 2px 6px rgba(24,24,27,0.08)' : 'none' },
+                String(Number(date.slice(8, 10)))),
+            dayEvents.slice(0, CAL_MAX).map(chip),
+            dayEvents.length > CAL_MAX && h('div', { fontSize: 11, fontWeight: 700, color: C.sub, paddingLeft: 4 }, `+${dayEvents.length - CAL_MAX}`));
+    };
+    const grid = h('div', { flexDirection: 'column', padding: '0 14px 8px' },
+        weeks.map((week, wi) => h('div', { borderTop: wi ? `1px solid ${C.tint}` : 'none', padding: '2px 0' }, week.map(cell))));
+    return out(format, cardOf(CAL_W)(head, wdRow, grid,
+        footer && h('div', { justifyContent: 'center', padding: '6px 0 20px' }, button(footer, true))), CAL_W);
+}
 
-async function png(tree) {
-    const svg = await toSvg(tree);
+const toSvg = async (tree, width) => satori(tree, { width: width + 28, fonts: await loadFonts(), loadAdditionalAsset });
+const out = (format, tree, width = CARD_W) => (format === 'svg' ? toSvg(tree, width) : png(tree, width));
+
+async function png(tree, width) {
+    const svg = await toSvg(tree, width);
     return new Resvg(svg, { fitTo: { mode: 'original' }, font: { loadSystemFonts: false } }).render().asPng();
 }

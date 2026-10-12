@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSchedule, postText, serializeSchedule, recentOwnPosts, weekDates, weekSchedule } from '../src/lib.mjs';
+import { monthWeeks, parseSchedule, postText, serializeSchedule, recentOwnPosts, weekDates, weekSchedule } from '../src/lib.mjs';
+import { starEvents } from '../src/staruniv.mjs';
 
 test('이번 주는 한국 시간 월요일부터', () => {
     // 2026-10-11 15:30 UTC = 10-12(월) 00:30 KST
@@ -55,4 +56,24 @@ test('편집 화면 저장 형식은 다시 읽어도 같다', () => {
     assert.equal(text, '2026-10-06 내용 두 칸\n\n2026-10-07 9:00 이른\n2026-10-07 시간미정 늦은\n\n2026-10-09 휴방\n');
     const again = parseSchedule(text, now);
     assert.deepEqual(weekSchedule(again, now), weekSchedule(parsed, now).map(d => ({ ...d, events: d.events.map((e, i) => ({ ...e, order: weekSchedule(again, now).find(x => x.date === d.date).events[i].order })) })));
+});
+
+test('여러 날 일정은 걸친 날마다, 이번 달 달력은 일요일부터', () => {
+    const now = Date.parse('2026-10-12T03:00:00Z');
+    const days = weekSchedule({ events: [{ date: '2026-10-13', end: '2026-10-14', time: '', text: '연습', order: 0 }], offAir: new Set() }, now);
+    assert.deepEqual(days.map(d => d.events.length), [0, 1, 1, 0, 0, 0, 0]);
+    const weeks = monthWeeks(now);
+    assert.equal(weeks.length, 5);
+    assert.deepEqual([weeks[0][0], weeks[0][4], weeks[4][6]], [
+        { date: '2026-09-27', inMonth: false }, { date: '2026-10-01', inMonth: true }, { date: '2026-10-31', inMonth: true },
+    ]);
+});
+
+test('스타유니브 일정 행을 뱃지 일정으로', () => {
+    const [a, b] = starEvents([
+        { start_date: '2026-10-13', end_date: '2026-10-14', event_time: '비방연습', person: '캄몬', description: null, color: 'orange' },
+        { start_date: '2026-10-15', end_date: '2026-10-15', event_time: '시간미정', person: '캄몬', description: '캄몬 VS 드림즈', color: 'blue' },
+    ]);
+    assert.deepEqual(a, { date: '2026-10-13', end: '2026-10-14', time: '', who: '캄몬', text: '비방연습', color: 'orange', order: 0 });
+    assert.equal(b.time, '시간미정');
 });

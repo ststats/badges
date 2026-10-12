@@ -1,13 +1,16 @@
-// /notice-1~3.png, /schedule.png (vercel.json이 여기로 보낸다)
+// 뱃지 그림. 주소는 /<대상>/<뱃지>.png (vercel.json이 ?t=대상&b=뱃지로 보낸다)
+//   소주양:     /soju/notice-1.png ~ notice-3.png, /soju/schedule.png
+//   스타유니브: /staruniv/schedule.png(이번 주), /staruniv/calendar.png(이번 달)
 // 그리는 데 CPU가 들어서(Vercel 무료 한도: 월 4시간) 내용이 바뀔 때만 그린다.
-//   /notice-1.png         → 지금 내용의 해시를 붙인 /notice-1.<해시>.png로 보낸다(CPU 거의 안 씀)
-//   /notice-1.<해시>.png  → 한 번 그리고 CDN이 계속 쓴다(내용이 바뀌면 해시가 바뀌므로 오래 둬도 된다)
+//   /soju/notice-1.png         → 지금 내용의 해시를 붙인 /soju/notice-1.<해시>.png로 보낸다(CPU 거의 안 씀)
+//   /soju/notice-1.<해시>.png  → 한 번 그리고 CDN이 계속 쓴다(내용이 바뀌면 해시가 바뀌므로 오래 둬도 된다)
 import crypto from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import { config } from '../src/config.mjs';
 import { noticeIndex, query } from '../src/http.mjs';
-import { kstToday, parseSchedule, weekSchedule } from '../src/lib.mjs';
+import { kstToday, monthWeeks, parseSchedule, weekSchedule } from '../src/lib.mjs';
 import { recentPosts, scheduleFile } from '../src/live.mjs';
+import { starSchedule } from '../src/staruniv.mjs';
 
 // 그림 도구(satori·sharp·resvg)는 실제로 그릴 때만 불러온다(돌려보내기만 하는 요청이 가볍게 뜨게)
 let renderer;
@@ -15,7 +18,6 @@ const loadRenderer = () => (renderer ||= import('../src/render.mjs'));
 
 const BUILD = process.env.VERCEL_GIT_COMMIT_SHA || 'dev'; // 코드가 바뀌면 그림도 새로
 const prewarmed = new Map();
-const { name, soopId } = config;
 
 // 그림에 나오는 칸만 남긴다(조회수·좋아요 수가 바뀔 때마다 다시 그리지 않게)
 const slimPost = p =>
@@ -28,24 +30,61 @@ const slimPost = p =>
         photos: (p.photos || []).map(x => ({ url: x?.url })),
     };
 
+const soju = { name: config.name, soopId: config.soopId, theme: config.theme };
+const star = { name: config.staruniv.name, logo: config.staruniv.logo, theme: config.staruniv.theme, footer: config.staruniv.footer };
+
+// 뱃지마다: 그림에 들어갈 값(args)과 그릴 함수, 고정 주소를 CDN이 기억할 초(fresh)
+// 소주양 일정은 편집 화면에서 저장하면 바로 바뀌므로 20초, 나머지는 1분
+const BADGES = {
+    soju: {
+        async schedule() {
+            const now = Date.now();
+            const days = weekSchedule(parseSchedule((await scheduleFile()).content, now), now);
+            return { args: { ...soju, footer: config.schedule?.footer, days, today: kstToday(now) }, draw: 'renderSchedule', fresh: 20 };
+        },
+        async notice(i) {
+            return { args: { ...soju, post: slimPost((await recentPosts())[i]), lines: config.noticeLines?.[i] }, draw: 'renderNotice', fresh: 60 };
+        },
+    },
+    staruniv: {
+        async schedule() {
+            const now = Date.now();
+            const { events } = await starSchedule();
+            const days = weekSchedule({ events, offAir: new Set() }, now);
+            return { args: { ...star, subtitle: '이번 주 일정', days, today: kstToday(now) }, draw: 'renderSchedule', fresh: 60 };
+        },
+        async calendar() {
+            const now = Date.now();
+            const { events, holidays } = await starSchedule();
+            const weeks = monthWeeks(now);
+            const [first, last] = [weeks[0][0].date, weeks.at(-1)[6].date];
+            return {
+                // 이번 달 칸에 걸치는 일정과 공휴일만 넣는다(다른 달 일정이 바뀌어도 다시 그리지 않게)
+                args: { ...star, weeks, today: kstToday(now),
+                    events: events.filter(ev => ev.date <= last && (ev.end || ev.date) >= first),
+                    holidays: [...holidays].filter(d => d >= first && d <= last).sort() },
+                draw: 'renderCalendar', fresh: 60,
+            };
+        },
+    },
+};
+
 async function badge(q) {
-    if (q.get('kind') === 'schedule') {
-        const now = Date.now();
-        const days = weekSchedule(parseSchedule((await scheduleFile()).content, now), now);
-        const args = { name, soopId, footer: config.schedule?.footer, days, today: kstToday(now) };
-        // 일정은 저장하면 바로 바뀌므로 고정 주소를 20초만 기억한다(글은 SOOP 쪽이라 1분)
-        return { base: 'schedule', args, render: async () => (await loadRenderer()).renderSchedule(args), fresh: 20 };
-    }
-    const i = noticeIndex(q);
-    const args = { name, soopId, post: slimPost((await recentPosts())[i]), lines: config.noticeLines?.[i] };
-    return { base: `notice-${i + 1}`, args, render: async () => (await loadRenderer()).renderNotice(args), fresh: 60 };
+    const t = q.get('t');
+    const notice = /^notice-(\d)$/.exec(q.get('b') || '');
+    const i = notice && noticeIndex(notice[1]);
+    const b = notice ? `notice-${i + 1}` : q.get('b');
+    const make = Object.hasOwn(BADGES, t) && (notice ? BADGES[t].notice : Object.hasOwn(BADGES[t], b) && BADGES[t][b]);
+    if (!make) throw Object.assign(new Error('없는 뱃지입니다'), { status: 404 });
+    const { args, draw, fresh } = await make(i);
+    return { base: `${t}/${b}`, args, fresh, render: async () => (await loadRenderer())[draw](args) };
 }
 
 export default async function handler(req, res) {
     const q = query(req);
     try {
         const { base, args, render, fresh } = await badge(q);
-        const key = crypto.createHash('sha256').update(BUILD + JSON.stringify(args)).digest('hex').slice(0, 12);
+        const key = crypto.createHash('sha256').update(BUILD + base + JSON.stringify(args)).digest('hex').slice(0, 12);
         const v = q.get('v');
         if (v !== key) {
             // 고정 주소이거나 지난 해시: 지금 그림으로 보낸다.
@@ -69,9 +108,9 @@ export default async function handler(req, res) {
         res.end(await render());
     } catch (e) {
         console.error(e);
-        res.statusCode = 502;
+        res.statusCode = e.status || 502;
         res.setHeader('Cache-Control', 'no-store');
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.end('뱃지를 그리지 못했습니다');
+        res.end(e.status === 404 ? e.message : '뱃지를 그리지 못했습니다');
     }
 }

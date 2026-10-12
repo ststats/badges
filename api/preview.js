@@ -14,7 +14,7 @@ export default async function handler(req, res) {
         const real = Date.now();
         const now = Math.min(Math.max(Number(body.now) || real, real - YEAR_MS), real + YEAR_MS); // 다음 주·지난 주 보기
         const days = weekSchedule(parseSchedule(String(body.content || ''), now), now);
-        const svg = await renderSchedule({ name: config.name, soopId: config.soopId, footer: config.schedule?.footer, days, today: kstToday(real), format: 'svg' });
+        const svg = await renderSchedule({ name: config.name, soopId: config.soopId, theme: config.theme, footer: config.schedule?.footer, days, today: kstToday(real), format: 'svg' });
         res.statusCode = 200;
         res.setHeader('Content-Type', 'image/svg+xml; charset=utf-8');
         res.setHeader('Cache-Control', 'no-store');

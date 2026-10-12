@@ -7,7 +7,7 @@ const MEMO_MS = 10000; // 같은 함수 인스턴스 안에서는 10초 기억(�
 const memo = new Map();
 const lastGood = new Map();
 
-async function rpc(fn, args) {
+export async function rpc(fn, args) {
     const { url, key } = config.supabase;
     const res = await fetch(`${url}/rest/v1/rpc/${fn}`, {
         method: 'POST',

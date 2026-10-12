@@ -2,6 +2,7 @@
 import crypto from 'node:crypto';
 import { config } from './config.mjs';
 import { boardApiUrl, recentOwnPosts } from './lib.mjs';
+import { keepFresh } from './cache.mjs';
 import { getFile } from './store.mjs';
 
 // ----- 쿠키: 편집 화면에서 저장한 암호문(badge_files의 cookie)을 COOKIE_KEY로 푼다 -----
@@ -55,17 +56,12 @@ async function fetchBoard(cookie) {
     }
 }
 
-// 공개 목록(public)과 쿠키로 본 목록(mine)을 각각 30초 기억한다.
-// SOOP이 잠깐 안 되면 직전에 받은 목록을 6시간까지 대신 쓴다(커뮤니티에 깨진 이미지가 뜨지 않게).
-const CACHE_MS = 30000;
-const FALLBACK_MS = 6 * 3600 * 1000;
-const boards = { public: {}, mine: {} };
+// 공개 목록(public)과 쿠키로 본 목록(mine)을 각각 30초 기억한다(SOOP이 잠깐 안 되면 직전 목록을 6시간까지).
 let lastCookieError = '';
 
-async function loadBoard(kind) {
-    if (kind === 'public') return fetchBoard('');
+async function loadMine() {
     const cookie = await currentCookie();
-    if (!cookie) return board('public');
+    if (!cookie) return boards.public();
     try {
         const posts = await fetchBoard(cookie);
         lastCookieError = '';
@@ -74,32 +70,19 @@ async function loadBoard(kind) {
         // 잘못되거나 만료된 쿠키면 SOOP이 500을 준다. 그때는 공개 글로 대신한다.
         lastCookieError = e.message;
         console.error('쿠키로 게시판 읽기 실패:', e.message);
-        return board('public');
+        return boards.public();
     }
 }
 
-function board(kind) {
-    const slot = boards[kind];
-    if (slot.request && Date.now() - slot.at < CACHE_MS) return slot.request;
-    const request = loadBoard(kind).then(
-        posts => ((slot.good = { at: Date.now(), posts }), posts),
-        e => {
-            if (slot.good && Date.now() - slot.good.at < FALLBACK_MS) {
-                console.error(`SOOP 게시판 실패, 직전 목록을 씁니다: ${e.message}`);
-                return slot.good.posts;
-            }
-            throw e;
-        }
-    );
-    Object.assign(slot, { at: Date.now(), request });
-    request.catch(() => { if (slot.request === request) slot.request = null; });
-    return request;
-}
+const boards = {
+    public: keepFresh(() => fetchBoard(''), { label: 'SOOP 게시판' }),
+    mine: keepFresh(loadMine, { label: 'SOOP 게시판' }),
+};
 
 // 새 쿠키를 저장한 뒤 바로 반영되게 기억을 지운다
-export const forgetBoards = () => { boards.public.request = boards.mine.request = null; };
+export const forgetBoards = () => { boards.public.forget(); boards.mine.forget(); };
 
-export const recentPosts = () => board('mine').then(posts => posts.slice(0, config.noticeCount));
+export const recentPosts = () => boards.mine().then(posts => posts.slice(0, config.noticeCount));
 
 const extraPosts = (mine, pub) => {
     const pubIds = new Set(pub.map(p => p.titleNo));
@@ -108,13 +91,13 @@ const extraPosts = (mine, pub) => {
 
 // 편집 화면이 새 쿠키를 저장하기 전에 SOOP이 받아 주는지 본다. 공개 목록에 없는 글 수를 돌려준다.
 export async function checkCookie(cookie) {
-    const [mine, pub] = await Promise.all([fetchBoard(cookie), board('public')]);
+    const [mine, pub] = await Promise.all([fetchBoard(cookie), boards.public()]);
     return extraPosts(mine, pub).length;
 }
 
 // /status: 쿠키로 받은 목록에 공개 목록에 없는 글이 있으면 즐겨찾기 글까지 받고 있는 것
 export async function cookieStatus() {
-    const [cookie, mine, pub] = await Promise.all([currentCookie(), board('mine'), board('public')]);
+    const [cookie, mine, pub] = await Promise.all([currentCookie(), boards.mine(), boards.public()]);
     return { hasCookie: !!cookie, error: lastCookieError, extra: extraPosts(mine, pub), posts: mine.slice(0, config.noticeCount) };
 }
 

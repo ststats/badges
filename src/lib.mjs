@@ -87,14 +87,29 @@ export function parseSchedule(text, nowMs) {
     return { events, offAir, errors };
 }
 
+// 날짜마다 그날 일정(시간순). 여러 날 일정(end)은 걸친 날마다 나온다.
+export const eventsOn = (events, date) =>
+    events
+        .filter(ev => ev.date <= date && date <= (ev.end || ev.date))
+        .sort((a, b) => timeKey(a.time).localeCompare(timeKey(b.time)) || a.order - b.order);
+
 export function weekSchedule({ events, offAir }, nowMs) {
-    return weekDates(nowMs).map(date => ({
-        date,
-        offAir: offAir.has(date),
-        events: events
-            .filter(ev => ev.date === date)
-            .sort((a, b) => timeKey(a.time).localeCompare(timeKey(b.time)) || a.order - b.order),
-    }));
+    return weekDates(nowMs).map(date => ({ date, offAir: offAir.has(date), events: eventsOn(events, date) }));
+}
+
+// 한국 시간 기준 이번 달 달력: 일요일부터 시작하는 주 단위 [[{date, inMonth}, ...7], ...]
+export function monthWeeks(nowMs) {
+    const [y, m] = kstToday(nowMs).split('-').map(Number);
+    const first = Date.UTC(y, m - 1, 1);
+    const start = first - new Date(first).getUTCDay() * DAY_MS;
+    const last = Date.UTC(y, m, 0);
+    const weeks = [];
+    for (let t = start; t <= last; t += 7 * DAY_MS)
+        weeks.push(Array.from({ length: 7 }, (_, i) => {
+            const date = new Date(t + i * DAY_MS).toISOString().slice(0, 10);
+            return { date, inMonth: Number(date.slice(5, 7)) === m };
+        }));
+    return weeks;
 }
 
 export const mmdd = date => `${Number(date.slice(5, 7))}.${Number(date.slice(8, 10))}`;

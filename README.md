@@ -1,30 +1,37 @@
-# 소주양 뱃지
+# 뱃지 모음(소주양·스타유니브)
 
-커뮤니티 글에 이미지로 넣는 뱃지입니다. 방송 썸네일처럼 **볼 때마다 서버가 새로 그려서**(최대 1분 지연)
-새 글이 올라오면 바로 바뀌고, 누르면 그 순간의 원글로 갑니다.
+커뮤니티 글에 이미지로 넣는 뱃지입니다. 방송 썸네일처럼 **볼 때마다 지금 내용으로 바뀌고**(최대 1분 지연)
+누르면 원글·원래 페이지로 갑니다. 모든 뱃지가 같은 디자인(파스텔 머리 + 흰 카드)과 같은 주소 규칙
+`/<대상>/<뱃지>.png`을 씁니다.
 
-| 뱃지 | 이미지 | 누르면 |
-|---|---|---|
-| 최근 글 1~3 | `/notice-1.png` ~ `/notice-3.png` | `/n/1` ~ `/n/3` → 지금의 그 글(SOOP 원글) |
-| 주간 일정(월~일) | `/schedule.png` | `/s` → 소주양 방송국 |
+| 대상 | 뱃지 | 이미지 | 누르면 |
+|---|---|---|---|
+| 소주양 | 최근 글 1~3 | `/soju/notice-1.png` ~ `/soju/notice-3.png` | `/soju/n/1` ~ `/soju/n/3` → 지금의 그 글(SOOP 원글) |
+| 소주양 | 주간 일정(월~일) | `/soju/schedule.png` | `/soju/s` → 소주양 방송국 |
+| 스타유니브 | 주간 일정(월~일) | `/staruniv/schedule.png` | `/staruniv/s` → 스타유니브 일정 페이지 |
+| 스타유니브 | 이번 달 달력(일~토) | `/staruniv/calendar.png` | `/staruniv/s` |
 
 붙여 넣을 코드는 Vercel 주소 첫 화면에 있습니다. 예:
 
 ```html
-<a href="https://<vercel 주소>/n/1"><img src="https://<vercel 주소>/notice-1.png" alt="소주양 최근 글 1"></a>
+<a href="https://<vercel 주소>/soju/n/1"><img src="https://<vercel 주소>/soju/notice-1.png" alt="소주양 최근 글 1"></a>
 ```
 
 ## 구조
 
-- **뱃지 그림**(`api/img.js`): `/notice-1.png`로 요청이 오면 SOOP 게시판을 읽고(30초 기억) 그림에 나오는 내용의
-  해시를 붙인 `/notice-1.<해시>.png`로 보냅니다(CDN 1분). 해시 주소는 `src/render.mjs`가 satori + resvg로 **한 번만**
+- **뱃지 그림**(`api/img.js`): `/soju/notice-1.png`로 요청이 오면 SOOP 게시판을 읽고(30초 기억) 그림에 나오는 내용의
+  해시를 붙인 `/soju/notice-1.<해시>.png`로 보냅니다(CDN 1분). 새 뱃지는 `api/img.js`의 `BADGES`에 한 줄 더하면 됩니다. 해시 주소는 `src/render.mjs`가 satori + resvg로 **한 번만**
   그리고 CDN이 계속 씁니다. 내용이 바뀔 때만 그려서 Vercel 무료 한도(Active CPU 월 4시간, 스타유니브·시너지와 합산)를
   거의 쓰지 않습니다. SOOP이 잠깐 안 되면 직전 목록을 6시간까지 대신 써서 깨진 이미지가 뜨지 않습니다.
 - **편집 화면**(`/edit/`, `src/edit.html`): 읽기·저장은 `api/save.js`(비밀번호 확인 후 Supabase에 저장, 바로 반영),
   미리보기는 `api/preview.js`(실제 뱃지와 같은 그림을 SVG로, 그림 변환을 건너뛰어 빠름).
 - **일정·쿠키**는 스타유니브 Supabase의 `badge_files` 표(`supabase/badges.sql`)에 둡니다. 쿠키는 암호문.
   저장하면 재배포 없이 바로 반영됩니다(일정 뱃지 고정 주소는 20초 캐시). Supabase가 잠깐 안 되면 직전에 읽은 값을 씁니다.
+- **스타유니브 일정**(`src/staruniv.mjs`): 사이트가 쓰는 공개 Supabase 함수 `api_schedule`·`api_holidays`를 그대로 읽습니다
+  (30초 기억). 스타유니브 관리자 화면에서 고치면 1분 안에 뱃지가 바뀝니다. 이번 달 칸에 걸친 일정만 그림 내용으로 쳐서
+  다른 달 일정을 고쳐도 다시 그리지 않습니다.
 - `src/lib.mjs` 글 목록·일정 처리(서버와 편집 화면이 같이 씀) · `src/live.mjs` SOOP 읽기·쿠키 ·
+  `src/staruniv.mjs` 스타유니브 일정 · `src/cache.mjs` 잠깐 기억·직전 값 대신 쓰기 ·
   `src/store.mjs` Supabase 저장소 · `src/render.mjs` 그림 · `src/http.mjs`·`src/config.mjs` 공용.
 
 ### Supabase(처음 한 번)
@@ -76,6 +83,12 @@
 SOOP 방송국 게시판 첫 쪽에서 소주양 본인 글(고정 공지 포함) 최신 3개. 본문은 가장 최근 글이 10줄, 나머지 두 개가 3줄까지 보입니다(`config.json`의 `noticeLines`).
 사진은 최신 글이면 본문 아래에 4장까지(더 있으면 `+N`), 나머지는 오른쪽에 첫 장만 작게 나옵니다.
 이미지라서 커뮤니티 안에서 '더보기'로 펼칠 수는 없고, 누르면 원글이 열립니다.
+
+## 스타유니브 일정
+
+사진·색은 스타유니브 로고에서, 일정 색은 사이트 달력과 같은 색 이름을 씁니다. 달력은 칸마다 일정 6개까지(넘치면 `+N`),
+공휴일은 빨간 날짜. 이름·로고·링크·버튼 글자는 `config.json`의 `staruniv`에서 바꿉니다.
+스타유니브 저장소의 `calendar.png`(크롬 캡처)는 외부 자동화가 가져가므로 그대로 둡니다.
 
 대상·링크 등은 `config.json`에서 바꿉니다. 머리 배경은 프로필 사진에서 뽑은 두 색의 파스텔 그라데이션이고,
 `"theme": {"from": "#e8eefc", "to": "#f3f0fb"}`처럼 넣으면 그 색으로 고정됩니다.
