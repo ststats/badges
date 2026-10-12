@@ -58,7 +58,7 @@ test('여러 새 글도 최신 번호로 잠금을 얻어 워크플로를 한 �
     assert.equal(result.dispatched, true);
     assert.equal(dispatched, 1);
     assert.equal(calls[0][1].p_title_no, 3);
-    assert.equal(calls[1][1].p_success, true);
+    assert.equal(calls.length, 1); // dispatch 접수로 완료 기록하지 않는다.
 });
 
 test('dispatch 실패는 성공으로 저장하지 않는다', async () => {
@@ -66,13 +66,13 @@ test('dispatch 실패는 성공으로 저장하지 않는다', async () => {
     await assert.rejects(detectAndDispatch({ posts: [post(1)], secret: 'secret',
         rpc: async (fn, args) => { if (fn.endsWith('claim')) return { lease: 'uuid' }; finishes.push(args); return true; },
         dispatch: async () => { throw Error('timeout'); } }));
-    assert.equal(finishes[0].p_success, false);
+    assert.equal(finishes[0].p_status, 'retry');
 });
 
 test('Vercel에서 본문을 읽을 때 쿠키·COOKIE_KEY 대신 일회성 GitHub 신원만 보낸다', async () => {
     const calls = [];
     const posts = [post(2)];
-    const result = await vercelPosts(123, { ACTIONS_ID_TOKEN_REQUEST_URL: 'https://github.example/identity', ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'request-token' },
+    const result = await vercelPosts({ ACTIONS_ID_TOKEN_REQUEST_URL: 'https://github.example/identity', ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'request-token' },
         async (url, options) => {
             calls.push({ url: String(url), options });
             return { ok: true, json: async () => calls.length === 1 ? { value: 'signed-token' } : { posts } };
@@ -84,10 +84,11 @@ test('Vercel에서 본문을 읽을 때 쿠키·COOKIE_KEY 대신 일회성 GitH
     await dispatchPosting('dispatch-token', async (url, opts) => {
         assert.equal(JSON.parse(opts.body).ref, 'main');
         assert.ok(url.endsWith('/autopost.yml/dispatches'));
+        assert.equal(JSON.parse(opts.body).inputs.delivery_title, '2');
         return { status: 204 };
-    });
+    }, { lease: '11111111-1111-4111-8111-111111111111', titleNo: '2' });
     await dispatchPosting('dispatch-token', async (_url, opts) => {
-        assert.deepEqual(JSON.parse(opts.body).inputs, { diagnose_only: true, publish_latest: false, recover_pending: '' });
+        assert.deepEqual(JSON.parse(opts.body).inputs, { diagnose_only: true });
         return { status: 204 };
     }, { diagnoseOnly: true });
 });

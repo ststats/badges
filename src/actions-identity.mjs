@@ -19,6 +19,6 @@ export async function verifyActionsIdentity(token, jwks = keys) {
     if (!subjects.includes(payload.sub) || payload.repository_id !== '1413985650' || payload.repository_owner_id !== '322625611'
         || payload.ref !== 'refs/heads/main'
         || payload.workflow_ref !== 'ststats/badges/.github/workflows/autopost.yml@refs/heads/main'
-        || !['schedule', 'workflow_dispatch'].includes(payload.event_name)) throw new Error('Untrusted workflow');
+        || payload.event_name !== 'workflow_dispatch') throw new Error('Untrusted workflow');
     return payload;
 }

@@ -78,10 +78,10 @@ test('초기 테스트는 기준 이전 최신 하나만 등록하고 재실행�
     assert.throws(() => postingCandidates(s, posts, true), /확인 필요/);
 });
 
-test('즐겨찾기 쿠키를 그대로 사용하고 여러 페이지/고정글을 중복 제거한다', async () => {
+test('첫 페이지와 고정글을 중복 제거하고 과거 페이지는 조회하지 않는다', async () => {
     const pages = [];
     const p = post(2);
-    const result = await collectPosts({ soopId: 'soju2022', cookie: 'auth=test', since: postTime(p) - 1000, fetcher: async (url, opts) => {
+    const result = await collectPosts({ soopId: 'soju2022', cookie: 'auth=test', fetcher: async (url, opts) => {
         if (!opts.headers) return { ok: true, json: async () => ({ contents: [], noticeData: [] }) };
         assert.equal(opts.headers.Cookie, 'auth=test');
         const page = Number(url.searchParams.get('page'));
@@ -89,11 +89,11 @@ test('즐겨찾기 쿠키를 그대로 사용하고 여러 페이지/고정글�
         return { ok: true, json: async () => ({ contents: page === 1 ? [p] : [post(1, '2026-10-01 00:00:00')], noticeData: [p], meta: { totalPages: 3 } }) };
     } });
     assert.deepEqual(result.map(p => p.titleNo), [2]);
-    assert.deepEqual(pages, [1, 2]);
+    assert.deepEqual(pages, [1]);
 });
 
 test('인증 수집 오류를 공개 목록으로 대체하지 않는다', async () => {
-    await assert.rejects(collectPosts({ soopId: 'soju2022', cookie: '', fetcher: () => assert.fail() }), /SOOP_COOKIE/);
+    await assert.rejects(collectPosts({ soopId: 'soju2022', cookie: '', fetcher: () => assert.fail() }), /저장된 SOOP 쿠키/);
     let calls = 0;
     await assert.rejects(collectPosts({ soopId: 'soju2022', cookie: 'auth=test', fetcher: async () => { calls++; return { ok: false, status: 401 }; } }), /공개 글로 대체하지/);
     assert.equal(calls, 1);

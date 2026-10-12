@@ -1,6 +1,7 @@
 import { chromium } from 'playwright';
 import { coolingDown, newPosts, postingCandidates, publishPosts, recoverPending } from '../src/autopost.mjs';
-import { vercelPosts } from '../src/autopost-source.mjs';
+import { withDelivery } from '../src/autopost-delivery.mjs';
+import { vercelPosts, reportDelivery } from '../src/autopost-source.mjs';
 import { githubState } from '../src/autopost-state.mjs';
 import { ygosuPublisher } from '../src/ygosu-publisher.mjs';
 
@@ -17,20 +18,13 @@ async function main() {
     }
     console.log('등록 이력 확인');
     const store = await githubState({ repository: process.env.GITHUB_REPOSITORY, token: process.env.GITHUB_TOKEN });
-    let state = store.state;
-    let includeLatest = process.env.PUBLISH_LATEST === 'true';
+    const state = store.state;
+    const includeLatest = process.env.PUBLISH_LATEST === 'true';
     const recovery = process.env.RECOVER_PENDING || '';
-    if (state?.pending && !recovery) newPosts(state, []);
-    if (state && coolingDown(state)) { console.log('최근 등록 후 5분 이내: 이번 실행은 건너뜁니다'); return; }
-    const started = Date.now();
+    if (state.pending && !recovery) newPosts(state, []);
+    if (coolingDown(state)) { console.log('최근 등록 후 5분 이내: 이번 실행은 건너뜁니다'); return; }
     console.log('SOOP 공개/즐겨찾기 글 수집 및 접근 확인');
-    const posts = await vercelPosts(state?.since);
-    if (!state) {
-        state = { version: 1, since: started, done: Object.fromEntries(posts.map(p => [String(p.titleNo), 'baseline'])) };
-        await store.save(state);
-        console.log('초기 기준 저장 완료. 최신 공지 하나만 등록합니다.');
-        includeLatest = true;
-    }
+    const posts = await vercelPosts();
     if (!recovery && !postingCandidates(state, posts, includeLatest).length) { console.log('등록할 공지 없음: 이미 등록한 최신 글은 재등록하지 않습니다'); return; }
     const browser = await chromium.launch({ headless: true });
     try {
@@ -49,15 +43,16 @@ async function main() {
                 prepare: async p => { console.log('전체 공지 이미지 생성·업로드'); return publisher.prepare(p); },
                 publish: async (p, uploads) => { console.log('와고 글 등록'); return publisher.publish(p, uploads); } });
             if (state.lastPostedAt === before) return;
-            // 기준 시각을 앞으로 옮겨 다음 실행의 수집 범위를 줄인다. 번호 기록은 유지한다.
-            state.since = started - 60000;
-            await store.save(state);
             console.log('새 공지 자동 등록 완료');
         } finally { await publisher.close(); }
     } finally { await browser.close(); }
 }
 
-main().catch(error => {
+withDelivery({
+    lease: process.env.DELIVERY_LEASE || '', titleNo: process.env.DELIVERY_TITLE || '', run: main,
+    loadState: async () => (await githubState({ repository: process.env.GITHUB_REPOSITORY, token: process.env.GITHUB_TOKEN })).state,
+    report: reportDelivery,
+}).catch(error => {
     // 정해진 고정 문구만 분류한다. 오류 원문에는 URL/본문/인증 정보가 포함될 수 있다.
     const known = [
         ['SOOP 전체 본문이 없습니다', 'SOOP_FULL_BODY_MISSING'],

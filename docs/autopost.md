@@ -11,6 +11,8 @@ Vercel이 로그인 목록을 확인하고 새 공지가 있을 때만 GitHub �
 GitHub 자체의 예약 실행은 없습니다. 이미지 생성·와고 로그인·등록은 GitHub에서 처리합니다.
 GitHub 작업은 OIDC 신원으로 `/api/autopost-source`를 호출합니다. 쿠키와 복호화 키는 Vercel 안에 남습니다.
 서버는 GitHub 서명, 저장소/소유자 ID, main, 워크플로 경로를 모두 검증합니다.
+등록 작업은 영구 이력을 다시 읽고 `/api/autopost-result`로 완료·재시도·중단을 통보합니다.
+GitHub 실행 요청 접수만으로 공지를 처리 완료로 기록하지 않습니다.
 
 2분 간격은 실시간 푸시가 아닙니다. GitHub 실행 대기 시간도 추가됩니다.
 Vercel 호출은 30일 기준 21,600회이며 CPU·메모리·전송량도 기존 뱃지와 함께 한도를 사용합니다.
@@ -39,9 +41,11 @@ SOOP 쿠키가 만료되면 기존 상태 화면에서 갱신합니다.
 
 1. 코드를 main에 병합하고 Vercel 배포 성공을 확인합니다.
 2. Supabase SQL Editor에서 `supabase/autopost.sql`을 실행합니다.
-3. GitHub Variable `AUTOPOST_ENABLED=true`를 설정하고 **소주양 공지 자동 등록**을 한 번 수동 실행합니다.
-   최초 실행은 현재 글을 기준으로 기록한 뒤 **최신 공지 딱 하나를 등록**합니다. 나머지 과거 글은 올리지 않습니다.
-   이 초기 실행을 감지 활성화보다 먼저 완료해야 합니다.
+3. 기존 `autopost-state/state.json` 이력이 정상인지 확인한 뒤 GitHub Variable `AUTOPOST_ENABLED=true`를 설정합니다.
+   브랜치·파일이 없거나 이력이 잘못되었으면 자동 초기화하지 않고 중단합니다. 삭제 전 커밋에서 이력을 복원하세요.
+   완전히 새로운 설치에만 운영자가 별도 orphan 브랜치 `autopost-state`에
+   `{ "version": 1, "since": 시작시각의 Unix 밀리초, "done": {} }` 형태의 `state.json`을 명시적으로 준비합니다.
+   기존 설치의 이력을 이 빈 파일로 바꾸면 안 됩니다.
 4. GitHub의 fine-grained PAT를 이 저장소만 선택하고 **Actions: Read and write** 권한으로 생성합니다.
    Vercel Production의 민감 환경 변수 `GITHUB_DISPATCH_TOKEN`에 저장합니다. 코드·Variables·채팅에 넣지 않습니다.
 5. Vercel Production에 `AUTOPOST_DETECT_ENABLED=true`를 설정하고 다시 배포합니다.
@@ -60,7 +64,10 @@ Supabase `ststat.sql`로 live-status cron을 다시 만들었다면 마지막 ti
 
 최신 새 글 **딱 하나만** 등록합니다. 밀린 나머지 글은 건너뛰며 마지막 성공 등록 후 5분 이내 추가 등록하지 않습니다.
 Supabase 감지 상태에는 글 번호·시각·잠금만 저장하고 첫 감지는 기준 저장만 합니다.
-행 잠금·5분 임대·dispatch 간격 제한으로 동시 감지를 막습니다.
+행 잠금과 실행별 UUID로 동시 감지를 막습니다. GitHub 실행 대기를 포함해 20분 동안 완료 통보를 기다립니다.
+준비 실패·5분 게시 간격으로 인한 보류는 5분 후 재시도하며, 강제 취소/시간 초과 등 통보가 없으면 임대 만료 후 재시도합니다.
+같은 최신 공지는 최초 실행 포함 최대 3회 시도하고 `retry_limit`에서 멈춥니다. 새 공지의 시도 횟수는 별도로 시작합니다.
+미확정 pending이나 읽을 수 없는 이력은 `blocked`로 전체 자동 실행을 중단합니다.
 GitHub 동일 워크플로는 한 번에 하나만 실행합니다.
 전용 orphan `autopost-state` 브랜치에는 시작 시각·SOOP 번호·와고 번호만 기록하며 본문·인증 정보를 저장하지 않습니다.
 이 브랜치를 Vercel Preview 배포 대상으로 추가하지 마세요.
@@ -78,10 +85,24 @@ GitHub 로그/artifact에 본문·쿠키·스크린샷을 남기지 않습니다
    확실히 등록되지 않았고 pending 생성 후 1시간 이내라면 중지 상태에서 결과 확인을 마친 뒤 활성화하고,
    수동 실행의 `recover_pending`에 해당 SOOP 번호를 정확히 입력해 같은 멱등키로 한 건만 복구합니다.
    시간이 지났거나 결과가 불확실하면 pending을 유지하고 수동 점검합니다. 상태 파일 전체를 지우지 마세요.
-3. `AUTOPOST_ENABLED=true`로 재개합니다.
+3. 이력 복원/복구가 완료되고 pending이 없음을 확인한 뒤 Supabase SQL Editor에서 아래를 실행합니다.
+   `update public.badge_autopost_state set blocked=false, attempts=0, lease=null, lease_until=null, last_attempt_at=null where id=1;`
+   완료 번호 `last_completed`는 초기화하지 않습니다. 자동 실행이 이미 진행 중이면 이 잠금을 해제하지 마세요.
+4. `AUTOPOST_ENABLED=true`로 재개합니다.
+
+`retry_limit`도 원인을 해결한 후 같은 절차로 시도 횟수를 재설정합니다.
+수동 실행의 `delivery_lease`와 `delivery_title`은 비워 둡니다. 감지기가 자동 실행을 요청할 때만 채웁니다.
+`diagnose_only`는 인증/글쓰기 폼 확인용이며 게시와 이력 변경을 하지 않습니다.
 
 ## 검증
 
-`npm test`: 수집·최신 하나·중복 방지·등록 전 상태 저장·내용 보존·OIDC 신원·감지/dispatch 검증.
+`npm test`: 수집·최신 하나·중복 방지·등록 전후 상태 저장·내용 보존·OIDC 신원·감지/완료/실패 경로 검증.
+`tests/autopost-delivery.sql`: 실제 DB 함수의 재시도 상한·완료 확인·오래된 통보 거절을 트랜잭션 안에서 검증하고 롤백합니다.
 `npx playwright install chromium && node scripts/preview-autopost.mjs`: 합성 긴 공지의 이미지 전체 생성·분할 검증.
 실계정 로그인·업로드·등록과 Supabase/Vercel 연결은 별도 운영 검증이 필요합니다.
+
+## DB 접근 권한
+
+감지 표는 RLS와 직접 접근 권한 회수로 외부 조회/수정을 막습니다.
+두 RPC는 기존 공개 API 키 연결을 유지하되 Vault의 `badge_write_secret`을 먼저 검사하고 빈 search_path와 스키마 명시를 사용합니다.
+따라서 Supabase advisor의 [anon SECURITY DEFINER 경고](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable)는 이 RPC에 대해 의도된 구조입니다. 잘못된 비밀값의 거절도 테스트합니다.

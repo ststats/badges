@@ -14,15 +14,18 @@ export async function githubState({ repository, token }) {
         return res.json();
     };
     const ref = await api(`git/ref/heads/${branch}`);
-    if (!ref) {
-        const tree = await api('git/trees', 'POST', { tree: [{ path: 'README.md', mode: '100644', type: 'blob', content: '자동 등록 상태 전용. 본문과 인증 정보는 저장하지 않습니다.\n' }] });
-        const commit = await api('git/commits', 'POST', { message: 'Initialize automatic posting state', tree: tree.sha, parents: [] });
-        await api('git/refs', 'POST', { ref: `refs/heads/${branch}`, sha: commit.sha });
-    }
+    if (!ref) throw new Error('자동 등록 이력 브랜치가 없습니다. 이력 복원이 필요합니다');
     const file = await api(`contents/${path}?ref=${branch}`);
-    sha = file?.sha;
-    const state = file ? JSON.parse(Buffer.from(file.content, 'base64').toString('utf8')) : null;
-    if (state && (state.version !== 1 || !Number.isFinite(state.since) || !state.done || typeof state.done !== 'object' || Array.isArray(state.done))) {
+    if (!file) throw new Error('자동 등록 이력 파일이 없습니다. 이력 복원이 필요합니다');
+    sha = file.sha;
+    const state = JSON.parse(Buffer.from(file.content, 'base64').toString('utf8'));
+    const validId = id => /^[1-9]\d*$/.test(id);
+    if (!state || state.version !== 1 || !Number.isFinite(state.since) || state.since <= 0
+        || !state.done || typeof state.done !== 'object' || Array.isArray(state.done)
+        || Object.entries(state.done).some(([id, value]) => !validId(id)
+            || !((Number.isSafeInteger(value) && value > 0) || ['baseline', 'skipped'].includes(value)))
+        || (state.lastPostedAt !== undefined && (!Number.isFinite(state.lastPostedAt) || state.lastPostedAt <= 0))
+        || (state.pending && (!validId(state.pending.id) || !Number.isFinite(Date.parse(state.pending.at))))) {
         throw new Error('자동 등록 상태 파일이 올바르지 않습니다');
     }
     return {
@@ -31,7 +34,7 @@ export async function githubState({ repository, token }) {
             const saved = await api(`contents/${path}`, 'PUT', {
                 message: 'Update automatic posting state', branch,
                 content: Buffer.from(JSON.stringify(value, null, 2) + '\n').toString('base64'),
-                ...(sha ? { sha } : {}),
+                sha,
             });
             sha = saved.content.sha;
         },

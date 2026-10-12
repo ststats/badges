@@ -19,8 +19,8 @@ export default async function handler(req, res) {
             return sendJson(res, 200, { diagnosticDispatched: true });
         }
         const posts = await collectPosts({ soopId: config.soopId, cookie: await currentCookie() });
-        const result = await detectAndDispatch({ posts, secret, rpc, dispatch: () => dispatchPosting(process.env.GITHUB_DISPATCH_TOKEN) });
-        return sendJson(res, 200, result);
+        const result = await detectAndDispatch({ posts, secret, rpc, dispatch: delivery => dispatchPosting(process.env.GITHUB_DISPATCH_TOKEN, fetch, delivery) });
+        return sendJson(res, 200, { ...result, deliveryVersion: 2 });
     } catch {
         return sendJson(res, 502, { error: 'Detector failed; check saved SOOP cookie, migration and dispatch credential' });
     }
