@@ -7,6 +7,9 @@
 .bar { max-width: 1160px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .bar h1 { font-size: 20px; letter-spacing: -0.03em; margin: 0; flex: 1; min-width: 140px; display: flex; align-items: center; gap: 10px; }
 .bar h1 img { width: 32px; height: 32px; border-radius: 32px; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(24,24,27,.15); }
+.pw { width: 150px; border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; background: #fff; font-size: 14px; }
+.pw.ok { border-color: #86efac; background: #f0fdf4; }
+.pw.bad { border-color: var(--red); background: #fff5f5; }
 .status { font-size: 13px; color: var(--sub); width: 100%; }
 .status.err { color: var(--red); } .status.ok { color: var(--green); }
 .cookie { width: 100%; font-size: 13px; font-weight: 600; border-radius: 12px; padding: 8px 12px; }
@@ -26,7 +29,7 @@ main { max-width: 1160px; margin: 0 auto; padding: 20px 16px 64px; display: grid
 .toggle input { width: 16px; height: 16px; accent-color: var(--ink); }
 .ev { display: flex; gap: 6px; margin-top: 8px; }
 .ev input { border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; background: #fff; min-width: 0; }
-.ev input:focus, details input:focus { outline: 2px solid #c7d2fe; outline-offset: 0; border-color: transparent; }
+.ev input:focus, .pw:focus { outline: 2px solid #c7d2fe; outline-offset: 0; border-color: transparent; }
 .ev .t { width: 78px; flex: none; text-align: center; font-variant-numeric: tabular-nums; }
 .ev .x { flex: 1; }
 .ev input.bad { border-color: var(--red); background: #fff5f5; }
@@ -35,28 +38,23 @@ main { max-width: 1160px; margin: 0 auto; padding: 20px 16px 64px; display: grid
 .add { margin-top: 8px; border: 1px dashed var(--line); background: none; border-radius: 10px; width: 100%; padding: 8px; color: var(--sub); font-weight: 600; cursor: pointer; }
 .add:hover { border-color: var(--faint); color: var(--ink); }
 .off .ev, .off .add { display: none; }
-aside { position: sticky; top: 150px; }
-@media (max-width: 1100px) { aside { position: static; } }
 aside h2 { font-size: 14px; color: var(--sub); margin: 4px 0 10px; }
 .preview { width: 100%; overflow: hidden; border-radius: 22px; }
 .preview img { width: 100%; max-width: 628px; display: block; transition: opacity .15s; }
 .preview img.busy { opacity: .5; }
-details { background: var(--card); border-radius: 16px; box-shadow: var(--shadow); padding: 12px 14px; margin-top: 16px; }
-summary { font-weight: 700; cursor: pointer; }
-details input { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; margin: 8px 0; }
 @media (max-width: 700px) {
     .toolbar { position: static; backdrop-filter: none; -webkit-backdrop-filter: none; } /* 흐림이 있으면 fixed 저장 버튼이 막대 안에 갇힌다 */
     #save { position: fixed; right: 16px; bottom: 16px; z-index: 15; padding: 12px 22px; font-size: 15px; box-shadow: 0 8px 24px rgba(24,24,27,.25); }
     #save:disabled { opacity: 0; pointer-events: none; }
     .bar h1 { font-size: 18px; }
 }
-.msg { font-size: 13px; margin: 6px 0 0; } .msg.err { color: var(--red); } .msg.ok { color: var(--green); }
 </style>
 </head>
 <body>
 <!--topbar:edit-->
 <div class="toolbar"><div class="bar">
   <h1><img id="avatar" alt="" hidden><span id="title">일정 편집</span></h1>
+  <input class="pw" id="pw" type="password" placeholder="편집 비밀번호" autocomplete="current-password" aria-label="편집 비밀번호" title="저장할 때 쓰는 비밀번호. 한 번 넣으면 이 브라우저에 기억돼요.">
   <button class="btn" id="reload" type="button">다시 불러오기</button>
   <button class="btn primary" id="save" type="button" disabled>저장</button>
   <div class="status" id="status">불러오는 중…</div>
@@ -72,14 +70,6 @@ details input { width: 100%; border: 1px solid var(--line); border-radius: 10px;
     <div id="days"></div>
     <p class="hint">시간은 <b>20:00</b>처럼 적고, 모르면 <b>미정</b>, 비워 두면 시간 없이 나옵니다. 내용을 비운 줄은 저장할 때 빠집니다.
       뱃지에는 늘 <b>이번 주</b>만 나오니, 다음 주 일정은 미리 적어 두면 월요일에 저절로 바뀝니다.</p>
-    <details id="pwBox">
-      <summary>편집 비밀번호</summary>
-      <p class="hint">저장할 때 쓰는 비밀번호예요(Vercel 환경 변수 <code>EDIT_PASSWORD</code>). 한 번 넣으면 이 브라우저에 기억돼요.</p>
-      <input id="pw" type="password" placeholder="비밀번호" autocomplete="current-password">
-      <button class="btn" id="pwCheck" type="button">확인</button>
-      <button class="btn" id="forget" type="button">이 브라우저에서 지우기</button>
-      <div class="msg" id="pwMsg"></div>
-    </details>
   </section>
   <aside>
     <h2>미리보기</h2>
@@ -103,19 +93,19 @@ const savedPw = {
     get: () => { try { return localStorage.getItem(PW_KEY) || ''; } catch { return ''; } },
     set: v => { try { v ? localStorage.setItem(PW_KEY, v) : localStorage.removeItem(PW_KEY); } catch {} },
 };
-const pwMsg = (text, cls = '') => { $('pwMsg').textContent = text; $('pwMsg').className = `msg ${cls}`; };
 $('pw').value = savedPw.get();
-if (!savedPw.get()) $('pwBox').open = true;
-$('pw').addEventListener('change', () => { savedPw.set($('pw').value); refreshButtons(); });
-$('forget').addEventListener('click', () => { savedPw.set(''); $('pw').value = ''; pwMsg(''); refreshButtons(); });
-$('pwCheck').addEventListener('click', async () => {
+// 바꾸면 기억하고 서버에 맞는지 물어 칸 테두리로 알려 준다(초록: 맞음, 빨강: 틀림)
+$('pw').addEventListener('change', async () => {
     savedPw.set($('pw').value);
+    $('pw').className = 'pw';
     refreshButtons();
+    if (!$('pw').value) return;
     try {
         await post({ file: 'check' });
-        pwMsg('맞아요. 이제 저장할 수 있어요.', 'ok');
+        $('pw').classList.add('ok');
     } catch (e) {
-        pwMsg(e.message, 'err');
+        $('pw').classList.add('bad');
+        status(e.message, 'err');
     }
 });
 
@@ -273,7 +263,7 @@ async function preview() {
 function refreshButtons() {
     const bad = state.events.some(e => e.bad);
     $('save').disabled = loading || !dirty || bad || !savedPw.get();
-    $('save').title = !savedPw.get() ? '아래 "편집 비밀번호"를 먼저 넣어 주세요' : bad ? '빨간 시간 칸을 고쳐 주세요' : '';
+    $('save').title = !savedPw.get() ? '왼쪽 편집 비밀번호 칸을 먼저 채워 주세요' : bad ? '빨간 시간 칸을 고쳐 주세요' : '';
 }
 
 $('save').addEventListener('click', async () => {
