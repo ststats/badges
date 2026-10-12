@@ -11,7 +11,7 @@
 | 캄몬스타즈 | 오늘의 일정(일정 + 휴방 멤버) | `/staruniv/today.png` | (링크 없음) |
 | 캄몬스타즈 | 이번 달 달력(일~토) | `/staruniv/calendar.png` | `/staruniv/s` → 스타유니브 일정 페이지 |
 
-붙여 넣을 코드는 Vercel 주소 첫 화면에 있습니다. 예:
+붙여 넣을 코드는 Vercel 주소 첫 화면(**뱃지 모음**)에서 `코드 복사`로 받습니다. 예:
 
 ```html
 <a href="https://<vercel 주소>/soju/n/1"><img src="https://<vercel 주소>/soju/notice-1.png" alt="소주양 최근 글 1"></a>
@@ -23,6 +23,9 @@
   해시를 붙인 `/soju/notice-1.<해시>.png`로 보냅니다(CDN 1분). 새 뱃지는 `api/img.js`의 `BADGES`에 한 줄 더하면 됩니다. 해시 주소는 `src/render.mjs`가 satori + resvg로 **한 번만**
   그리고 CDN이 계속 씁니다. 내용이 바뀔 때만 그려서 Vercel 무료 한도(Active CPU 월 4시간, 스타유니브·시너지와 합산)를
   거의 쓰지 않습니다. SOOP이 잠깐 안 되면 직전 목록을 6시간까지 대신 써서 깨진 이미지가 뜨지 않습니다.
+- **화면 세 개**: 뱃지 모음(`/`, `src/index.html`) · 일정 편집(`/edit/`) · 상태(`/status`, `api/status.js`)가 같은 위 막대와
+  `src/site.css`를 써서 한 사이트처럼 오갑니다. 머리·위 막대는 `src/shell.mjs` 하나에서 만들고, 정적 화면에는 빌드
+  (`scripts/vercel-public.mjs`)가 `<!--head:…-->`, `<!--topbar:…-->` 자리에 넣습니다.
 - **편집 화면**(`/edit/`, `src/edit.html`): 읽기·저장은 `api/save.js`(비밀번호 확인 후 Supabase에 저장, 바로 반영),
   미리보기는 `api/preview.js`(실제 뱃지와 같은 그림을 SVG로, 그림 변환을 건너뛰어 빠름).
 - **일정·쿠키**는 스타유니브 Supabase의 `badge_files` 표(`supabase/badges.sql`)에 둡니다. 쿠키는 암호문.

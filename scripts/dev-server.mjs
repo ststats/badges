@@ -13,7 +13,7 @@ const vercel = JSON.parse(await fs.readFile(path.join(root, 'vercel.json'), 'utf
 const handlers = { '/api/img': img, '/api/go': go, '/api/status': status, '/api/save': save, '/api/preview': preview };
 const toRegex = src =>
     new RegExp('^' + src.replace(/[.]/g, '\\.').replace(/:(\w+)\(([^)]+)\)/g, '(?<$1>$2)').replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$');
-const types = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript', '.json': 'application/json' };
+const types = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript', '.json': 'application/json', '.css': 'text/css' };
 
 http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
