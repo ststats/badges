@@ -77,7 +77,13 @@ export function postingCandidates(state, posts, includeLatest = false) {
 
 export function articleBody(soopId, post, uploads) {
     if (!uploads.length) throw new Error('완성된 공지 이미지가 없습니다');
-    return uploads.map(x => `<p><img src="${escapeHTML(x.fileUrl)}" alt="공지 전체 ${x.part}" style="max-width:100%;height:auto"></p>`).join('')
+    return uploads.map(x => {
+        if (!/^S[a-zA-Z0-9._-]+$/.test(x.code || '') || new URL(x.fileUrl).searchParams.get('code') !== x.code) {
+            throw new Error('와고 본문 이미지와 첨부 코드 불일치');
+        }
+        // 와고 편집기가 저장하는 첨부 참조. src만 있으면 V3가 editor 첨부와 본문 불일치로 거절한다.
+        return `<p><img src="${escapeHTML(x.fileUrl)}" data-storage-code="${escapeHTML(x.code)}" alt="공지 전체 ${x.part}" style="max-width:100%;height:auto"></p>`;
+    }).join('')
         + `<p><a href="${escapeHTML(postUrl(soopId, post.titleNo))}">SOOP 원문 보기</a></p>`;
 }
 

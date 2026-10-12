@@ -131,8 +131,10 @@ test('긴 제목/100문단/사진 7장을 모두 포함하고 위험한 HTML은 
     assert.equal((html.match(/alt="첨부 사진"/g) || []).length, 7);
     assert.ok(!html.includes('alert(1)'));
     assert.ok(!html.includes('line-clamp'));
-    const body = articleBody('soju2022', p, [{ fileUrl: 'https://image.ygosu.com/a.png', part: '1/1' }]);
+    const body = articleBody('soju2022', p, [{ fileUrl: 'https://storage2.ygosu.com/?code=Stest.123', code: 'Stest.123', part: '1/1' }]);
     assert.ok(body.includes('/post/1'));
+    assert.ok(body.includes('data-storage-code="Stest.123"'));
+    assert.throws(() => articleBody('soju2022', p, [{ fileUrl: 'https://storage2.ygosu.com/?code=Sother', code: 'Stest.123', part: '1/1' }]), /첨부 코드 불일치/);
 });
 
 test('요약뿐인 글/누락 사진/영상은 생략한 채 게시하지 않는다', () => {
