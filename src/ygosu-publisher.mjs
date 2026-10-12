@@ -28,6 +28,22 @@ export async function ygosuPublisher(browser, { id, password, log = () => {} }) 
     if (login !== 'SUCCESS') { await context.close(); throw new Error('와고 자동 로그인 실패 또는 추가 인증 필요'); }
     return {
         close: () => context.close(),
+        async diagnose() {
+            await page.goto(`https://ygosu.com/board/${BOARD}/?mode=write`, { waitUntil: 'domcontentloaded' });
+            await page.waitForFunction(() => typeof YG_BOARD !== 'undefined' && typeof YG_COMMON !== 'undefined' && document.querySelector('form[name="writeform"]'));
+            return page.evaluate(async board => {
+                const form = document.querySelector('form[name="writeform"]');
+                const ctx = YG_BOARD.getV3ArticleWriteContext(form);
+                const token = String(new FormData(form).get('csrf_token') || '');
+                const restored = await YG_LOGIN_SESSION.restore();
+                return {
+                    writeContext: ctx?.boardCode === board && ctx?.mode === 'write',
+                    csrfPresent: token.length > 0,
+                    authenticated: restored.authenticated === true,
+                    refreshAccepted: ctx ? await YG_COMMON.refreshV3Authentication(ctx.csrfScope, token) : false,
+                };
+            }, BOARD);
+        },
         async prepare(post) {
             log('프로필 준비');
             const who = await profile({ soopId: config.soopId, theme: config.theme });

@@ -7,6 +7,15 @@ import { ygosuPublisher } from '../src/ygosu-publisher.mjs';
 
 // 인증 정보/본문/스크린샷을 Actions 로그나 artifact로 남기지 않는다.
 async function main() {
+    if (process.env.DIAGNOSE_ONLY === 'true') {
+        const browser = await chromium.launch({ headless: true });
+        try {
+            const publisher = await ygosuPublisher(browser, { id: process.env.YGOSU_ID, password: process.env.YGOSU_PASSWORD, log: console.log });
+            try { console.log('읽기 전용 진단: ' + JSON.stringify(await publisher.diagnose())); }
+            finally { await publisher.close(); }
+        } finally { await browser.close(); }
+        return;
+    }
     console.log('등록 이력 확인');
     const store = await githubState({ repository: process.env.GITHUB_REPOSITORY, token: process.env.GITHUB_TOKEN });
     let state = store.state;
