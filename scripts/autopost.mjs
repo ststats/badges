@@ -1,5 +1,4 @@
 import { chromium } from 'playwright';
-import { config } from '../src/config.mjs';
 import { coolingDown, newPosts, postingCandidates, publishPosts, recoverPending } from '../src/autopost.mjs';
 import { vercelPosts } from '../src/autopost-source.mjs';
 import { githubState } from '../src/autopost-state.mjs';
@@ -36,7 +35,7 @@ async function main() {
     const browser = await chromium.launch({ headless: true });
     try {
         console.log('와고 자동 로그인');
-        const publisher = await ygosuPublisher(browser, { id: process.env.YGOSU_ID, password: process.env.YGOSU_PASSWORD, log: console.log, postingKeys: state.postingKeys });
+        const publisher = await ygosuPublisher(browser, { id: process.env.YGOSU_ID, password: process.env.YGOSU_PASSWORD, log: console.log });
         try {
             if (recovery) {
                 console.log('미확정 한 건만 동일 멱등키로 복구');

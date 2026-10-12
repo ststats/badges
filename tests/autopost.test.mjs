@@ -1,10 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { collectPosts, newPosts, postingCandidates, publishPosts, recoverPending, postTime, articleBody, articleSubject, noticeCategoryCode } from '../src/autopost.mjs';
+import { collectPosts, newPosts, postingCandidates, publishPosts, recoverPending, postTime, articleBody, articleSubject, noticeCategoryCode, postingKey } from '../src/autopost.mjs';
 import { fullContent, noticeDocument } from '../src/notice-document.mjs';
 
 const post = (id, date = '2026-10-12 12:00:00') => ({ titleNo: id, userId: 'soju2022', regDate: date, titleName: '제목', content: { content: '<p>전체 본문</p>' }, photos: [] });
 const state = () => ({ version: 1, since: postTime(post(1)) - 1000, done: {} });
+
+test('등록 키는 같은 원문에 고정되고 다른 원문과 구분된다', () => {
+    assert.equal(postingKey(209610437), postingKey('209610437'));
+    assert.match(postingKey(209610437), /^[a-f0-9]{64}$/);
+    assert.notEqual(postingKey(209610437), postingKey(209610438));
+    for (const id of ['', 0, -1, '01', '1.0', undefined]) assert.throws(() => postingKey(id));
+});
 
 test('본문 co.kr와 첨부 com의 같은 사진은 추가하지 않고 다른 사진은 보존한다', () => {
     const p = post(1);
@@ -128,6 +135,7 @@ test('밀린 글 100개도 최신 하나만 전송하고 나머지는 영구적�
     assert.equal(s.done['100'], 900);
     assert.equal(s.done['99'], 'skipped');
     assert.equal(snapshots[0].done['1'], 'skipped');
+    assert.equal(snapshots[0].pending.at, new Date(1000000).toISOString());
     assert.equal(newPosts(s, posts).length, 0);
     // 재실행/수동 실행에서도 5분 안에는 추가 등록하지 않는다.
     await publishPosts({ state: s, posts: [post(101)], prepare: () => assert.fail(), save: () => assert.fail(), publish: () => assert.fail(), now: () => 1000001 });

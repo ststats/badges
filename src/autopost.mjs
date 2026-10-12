@@ -1,7 +1,13 @@
 // 자동 등록에는 뱃지의 캐시/공개 글 대체를 사용하지 않는다.
+import { createHash } from 'node:crypto';
 import { boardApiUrl, recentOwnPosts, escapeHTML, postUrl } from './lib.mjs';
 
 export const BOARD = 'pan_sojuyang';
+
+export function postingKey(titleNo) {
+    if (!/^[1-9]\d*$/.test(String(titleNo))) throw new Error('와고 등록 원문 번호 확인 실패');
+    return createHash('sha256').update(`soju:${BOARD}:${titleNo}`).digest('hex');
+}
 
 export function noticeCategoryCode(links, board = BOARD) {
     for (const link of links) {
@@ -83,7 +89,7 @@ export function articleBody(soopId, post, uploads) {
         }
         // 와고 편집기가 저장하는 첨부 참조. src만 있으면 V3가 editor 첨부와 본문 불일치로 거절한다.
         return `<p><img src="${escapeHTML(x.fileUrl)}" data-storage-code="${escapeHTML(x.code)}" alt="공지 전체 ${x.part}" style="max-width:100%;height:auto"></p>`;
-    }).join('') + `<p style="text-align:right"><a href="${escapeHTML(postUrl(soopId, post.titleNo))}" target="_blank" rel="noopener noreferrer" style="display:inline-block;border:1px solid #e4e4e7;border-radius:999px;padding:7px 12px;background-color:#fafafa;color:#52525b;font-size:13px;font-weight:bold;text-decoration:none">원문 링크 ↗</a></p>`;
+    }).join('') + `<p style="text-align:right"><a href="${escapeHTML(postUrl(soopId, post.titleNo))}" target="_blank" rel="noopener noreferrer" style="display:inline-block;border:1px solid #e4e4e7;padding:7px 12px;background-color:#fafafa;color:#52525b;font-size:13px;font-weight:bold;text-decoration:none">원문 링크 ↗</a></p>`;
 }
 
 export const coolingDown = (state, now = Date.now()) => Number.isFinite(state.lastPostedAt) && now - state.lastPostedAt < 5 * 60000;
@@ -109,17 +115,17 @@ export async function publishPosts({ state, posts, save, prepare, publish, now =
     if (coolingDown(state, now()) || !candidates.length) return state;
     // 배열 순서와 무관하게 최신 하나만 선택한다. 밀린 글을 루프로 전송하지 않는다.
     const post = [...candidates].sort((a, b) => postTime(b) - postTime(a) || Number(b.titleNo) - Number(a.titleNo))[0];
-        // 이미지 생성·업로드 실패는 글을 보내기 전이므로 다음 실행에서 다시 준비해도 된다.
-        const prepared = await prepare(post);
-        for (const older of candidates) {
-            if (String(older.titleNo) !== String(post.titleNo)) state.done[String(older.titleNo)] = 'skipped';
-        }
-        state.pending = { id: String(post.titleNo), at: new Date().toISOString() };
-        await save(state); // 영구 저장에 성공하기 전에는 등록 요청을 보내지 않는다.
-        const articleId = await publish(post, prepared);
-        state.done[String(post.titleNo)] = articleId;
-        state.lastPostedAt = now();
-        delete state.pending;
-        await save(state); // 응답 이후 저장이 실패해도 원격 pending이 남아 재전송을 막는다.
+    // 이미지 생성·업로드 실패는 글을 보내기 전이므로 다음 실행에서 다시 준비해도 된다.
+    const prepared = await prepare(post);
+    for (const older of candidates) {
+        if (String(older.titleNo) !== String(post.titleNo)) state.done[String(older.titleNo)] = 'skipped';
+    }
+    state.pending = { id: String(post.titleNo), at: new Date(now()).toISOString() };
+    await save(state); // 영구 저장에 성공하기 전에는 등록 요청을 보내지 않는다.
+    const articleId = await publish(post, prepared);
+    state.done[String(post.titleNo)] = articleId;
+    state.lastPostedAt = now();
+    delete state.pending;
+    await save(state); // 응답 이후 저장이 실패해도 원격 pending이 남아 재전송을 막는다.
     return state;
 }

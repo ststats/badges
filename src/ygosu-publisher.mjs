@@ -1,10 +1,9 @@
-import { BOARD, articleBody, articleSubject, noticeCategoryCode } from './autopost.mjs';
+import { BOARD, articleBody, articleSubject, noticeCategoryCode, postingKey } from './autopost.mjs';
 import { config } from './config.mjs';
 import { profile } from './render.mjs';
 import { captureNotice, noticeDocument } from './notice-document.mjs';
-import { createHash } from 'node:crypto';
 
-export async function ygosuPublisher(browser, { id, password, log = () => {}, postingKeys = {} }) {
+export async function ygosuPublisher(browser, { id, password, log = () => {} }) {
     if (!id || !password) throw new Error('YGOSU_ID와 YGOSU_PASSWORD Secrets가 필요합니다');
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const page = await context.newPage();
@@ -98,29 +97,34 @@ export async function ygosuPublisher(browser, { id, password, log = () => {}, po
         async publish(post, uploads) {
             const subject = articleSubject(post);
             const body = articleBody(config.soopId, post, uploads);
-            const key = postingKeys[String(post.titleNo)] || createHash('sha256').update(`soju:${BOARD}:${post.titleNo}`).digest('hex');
-            if (!/^[a-f0-9]{64}$/.test(key)) throw new Error('와고 등록 멱등키 확인 실패');
+            const key = postingKey(post.titleNo);
             const outcome = await page.evaluate(async ({ board, subject, body, codes, key, categoryCode }) => {
                 try {
-                const form = document.querySelector('form[name="writeform"]');
-                const ctx = YG_BOARD.getV3ArticleWriteContext(form);
-                if (!ctx || ctx.boardCode !== board) throw new Error('와고 글쓰기 문맥 변경');
-                const data = new FormData(form);
-                data.set('subject', subject);
-                data.set('body', body);
-                data.delete('category_code[]');
-                data.append('category_code[]', categoryCode);
-                data.delete('use_notice');
-                data.set('storage_code_list_editor', codes.join(','));
-                const payload = YG_BOARD.getV3ArticleWritePayload(data, ctx);
-                if (payload.categoryCode !== categoryCode) throw new Error('와고 공지 카테고리 적용 실패');
-                // 글 내용이 같으면 실행을 넘어 같은 멱등키를 사용한다.
-                YG_BOARD.createV3ArticleIdempotencyKey = () => key;
-                // 캡차/추가 인증 오류는 자동 해결하지 않고 중단한다.
-                const result = await YG_BOARD.submitV3ArticleWrite(ctx, payload, String(data.get('csrf_token') || ''));
-                const article = result?.article;
-                if (article?.boardCode !== board || !Number.isSafeInteger(Number(article.articleId)) || Number(article.articleId) < 1) throw new Error('와고 등록 결과 확인 실패');
-                return { articleId: Number(article.articleId) };
+                    const form = document.querySelector('form[name="writeform"]');
+                    const ctx = YG_BOARD.getV3ArticleWriteContext(form);
+                    if (!ctx || ctx.boardCode !== board) throw new Error('와고 글쓰기 문맥 변경');
+                    const data = new FormData(form);
+                    data.set('subject', subject);
+                    data.set('body', body);
+                    data.delete('category_code[]');
+                    data.append('category_code[]', categoryCode);
+                    data.delete('use_notice');
+                    data.set('storage_code_list_editor', codes.join(','));
+                    const payload = YG_BOARD.getV3ArticleWritePayload(data, ctx);
+                    if (payload.categoryCode !== categoryCode) throw new Error('와고 공지 카테고리 적용 실패');
+                    // 동일 원문은 실행/복구를 넘어 같은 키를 쓴다. 사이트 함수 변경은 요청 동안만 유지한다.
+                    const originalKey = YG_BOARD.createV3ArticleIdempotencyKey;
+                    let result;
+                    try {
+                        YG_BOARD.createV3ArticleIdempotencyKey = () => key;
+                        // 캡차/추가 인증 오류는 자동 해결하지 않고 중단한다.
+                        result = await YG_BOARD.submitV3ArticleWrite(ctx, payload, String(data.get('csrf_token') || ''));
+                    } finally {
+                        YG_BOARD.createV3ArticleIdempotencyKey = originalKey;
+                    }
+                    const article = result?.article;
+                    if (article?.boardCode !== board || !Number.isSafeInteger(Number(article.articleId)) || Number(article.articleId) < 1) throw new Error('와고 등록 결과 확인 실패');
+                    return { articleId: Number(article.articleId) };
                 } catch (error) {
                     const known = [
                         ['로그인 상태를 다시', 'AUTH_REFRESH_FAILED'],
