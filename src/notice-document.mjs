@@ -12,6 +12,14 @@ export function safeImage(url) {
     } catch { return ''; }
 }
 
+// SOOP 본문과 첨부 목록은 동일한 stimg 파일에 서로 다른 도메인을 쓴다.
+// 실제 로딩 주소는 보존하고, 첨부 중복 비교에만 알려진 두 호스트를 통일한다.
+function imageIdentity(url) {
+    const u = new URL(url);
+    if (u.hostname === 'stimg.sooplive.co.kr') u.hostname = 'stimg.sooplive.com';
+    return u.href;
+}
+
 export function fullContent(post) {
     if (!post.content || typeof post.content.content !== 'string') {
         // summary/textContent는 잘릴 수 있어서 전체 본문 대신 쓰지 않는다.
@@ -33,12 +41,13 @@ export function fullContent(post) {
             video: () => { throw new Error('원문에 영상이 있습니다. 이미지로 모두 담을 수 없어 등록을 중단했습니다'); },
         },
     });
-    const present = new Set([...html.matchAll(/<img[^>]*src="([^"]+)"/g)].map(m => m[1].replace(/&amp;/g, '&')));
+    const present = new Set([...html.matchAll(/<img[^>]*src="([^"]+)"/g)].map(m => imageIdentity(m[1].replace(/&amp;/g, '&'))));
     const extras = (post.photos || []).map(p => {
         const url = safeImage(p.url);
         if (!url) throw new Error('사진 주소를 확인할 수 없습니다');
-        if (present.has(url)) return '';
-        present.add(url);
+        const identity = imageIdentity(url);
+        if (present.has(identity)) return '';
+        present.add(identity);
         return `<p><img src="${escapeHTML(url)}" alt="첨부 사진"></p>`;
     }).join('');
     return html + extras;

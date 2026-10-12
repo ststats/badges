@@ -6,6 +6,21 @@ import { fullContent, noticeDocument } from '../src/notice-document.mjs';
 const post = (id, date = '2026-10-12 12:00:00') => ({ titleNo: id, userId: 'soju2022', regDate: date, titleName: '제목', content: { content: '<p>전체 본문</p>' }, photos: [] });
 const state = () => ({ version: 1, since: postTime(post(1)) - 1000, done: {} });
 
+test('본문 co.kr와 첨부 com의 같은 사진은 추가하지 않고 다른 사진은 보존한다', () => {
+    const p = post(1);
+    p.content.content = '<p>앞</p><img src="https://stimg.sooplive.co.kr/NORMAL_BBS/4/owner/photo.jpeg"><p>뒤</p>';
+    p.photos = [
+        { url: 'https://stimg.sooplive.com/NORMAL_BBS/4/owner/photo.jpeg' },
+        { url: 'https://stimg.sooplive.com/NORMAL_BBS/4/other/photo.jpeg' },
+        { url: 'https://stimg.sooplive.co.kr/NORMAL_BBS/4/other/photo.jpeg' },
+    ];
+    const html = fullContent(p);
+    assert.equal((html.match(/<img /g) || []).length, 2);
+    assert.ok(html.includes('https://stimg.sooplive.co.kr/NORMAL_BBS/4/owner/photo.jpeg'));
+    assert.ok(html.indexOf('앞') < html.indexOf('/owner/photo.jpeg') && html.indexOf('/owner/photo.jpeg') < html.indexOf('뒤'));
+    assert.ok(html.includes('/other/photo.jpeg'));
+});
+
 test('복구는 지정한 pending 하나만 보내고 오류가 나면 잠금을 유지한다', async () => {
     const s = state();
     const now = Date.now();
