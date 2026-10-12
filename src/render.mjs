@@ -4,7 +4,7 @@ import path from 'node:path';
 import satori from 'satori';
 import sharp from 'sharp';
 import { Resvg } from '@resvg/resvg-js';
-import { root } from './config.mjs';
+import { config, root } from './config.mjs';
 import { formatPostDate, mmdd, postText, weekdayOf } from './lib.mjs';
 
 let fontsPromise = null;
@@ -51,24 +51,74 @@ const download = (url, timeoutMs = 6000) =>
     });
 const dataUri = (type, buf) => `data:${type};base64,${buf.toString('base64')}`;
 
-// 사진: 정사각형으로 잘라 줄인 PNG. SOOP 프로필은 jpg 주소인데 움직이는 GIF라 첫 장면만 쓴다.
+// 사진: 정사각형으로 잘라 줄인 PNG(움짤이면 첫 장면)
 const thumbs = new Map();
-const thumb = (url, size) =>
-    remember(thumbs, `${size}|${url}`, async () => {
-        const buf = await download(url);
-        return buf && dataUri('image/png', await sharp(buf, { animated: false }).rotate().resize(size, size, { fit: 'cover' }).png().toBuffer());
-    });
+const thumbOf = (key, buf, size) =>
+    remember(thumbs, `${size}|${key}`, async () =>
+        buf && dataUri('image/png', await sharp(buf, { animated: false }).rotate().resize(size, size, { fit: 'cover' }).png().toBuffer()));
+const thumb = async (url, size) => thumbOf(url, await download(url), size);
 
-// 머리 배경: 프로필 사진의 색만 쓴다. 4×2칸 평균 색으로 줄였다가 늘려 흐리면 얼굴 모양 없이 그 분위기만 남는다.
-const banners = new Map();
-const banner = url =>
-    remember(banners, url, async () => {
+// ----- 프로필: 사진과 그 사진에서 뽑은 색 -----
+// SOOP 프로필 원본(.jpg 주소)은 1MB가 넘는 움짤 GIF라, 같은 사진의 작은 판(/m/, 100px webp)을 먼저 받는다.
+const profileUrls = soopId => {
+    const base = `https://profile.img.sooplive.com/LOGO/${soopId.slice(0, 2)}/${soopId}`;
+    return [`${base}/m/${soopId}.webp`, `${base}/${soopId}.jpg`];
+};
+const profileBuf = async soopId => {
+    for (const url of profileUrls(soopId)) {
         const buf = await download(url);
-        if (!buf) return null;
-        const grid = await sharp(buf, { animated: false }).resize(4, 2, { fit: 'cover' }).modulate({ saturation: 1.3, brightness: 1.05 }).removeAlpha().raw().toBuffer();
-        const out = await sharp(grid, { raw: { width: 4, height: 2, channels: 3 } }).resize(CARD_W, 160, { kernel: 'cubic' }).blur(28).jpeg({ quality: 88 }).toBuffer();
-        return dataUri('image/jpeg', out);
-    });
+        if (buf) return buf;
+    }
+    return null;
+};
+
+const hex = (r, g, b) => '#' + [r, g, b].map(v => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
+function hsl2hex(h, s, l) {
+    const k = n => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    return hex(f(0) * 255, f(8) * 255, f(4) * 255);
+}
+function rgb2hsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2, d = max - min;
+    if (!d) return [0, 0, l];
+    const s = d / (1 - Math.abs(2 * l - 1));
+    const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return [(h * 60 + 360) % 360, s, l];
+}
+
+// 사진의 선명한 색을 색상(12칸)별로 모아 가장 많은 색과, 그와 60도 이상 떨어진 다음 색을 고른다.
+// 머리 배경은 그 두 색의 밝은 파스텔 그라데이션, accent는 같은 색의 진한 판(작은 강조용).
+const NEUTRAL = { from: '#eceef3', to: '#f5f5f7', accent: '#3f3f46' };
+async function paletteOf(buf) {
+    if (!buf) return NEUTRAL;
+    const data = await sharp(buf, { animated: false }).resize(24, 24, { fit: 'cover' }).removeAlpha().raw().toBuffer();
+    const bins = Array.from({ length: 12 }, () => ({ w: 0, h: 0, s: 0 }));
+    for (let i = 0; i < data.length; i += 3) {
+        const [h, s, l] = rgb2hsl(data[i], data[i + 1], data[i + 2]);
+        if (s < 0.2 || l < 0.15 || l > 0.92) continue;
+        const w = s * (1 - Math.abs(l - 0.55));
+        const bin = bins[Math.floor(h / 30) % 12];
+        bin.w += w; bin.h += h * w; bin.s += s * w;
+    }
+    const ranked = bins.map((b, i) => ({ i, w: b.w, h: b.w ? b.h / b.w : 0, s: b.w ? b.s / b.w : 0 })).filter(b => b.w > 0).sort((x, y) => y.w - x.w);
+    if (!ranked.length) return NEUTRAL;
+    const [a] = ranked;
+    const far = x => Math.min(Math.abs(x.i - a.i), 12 - Math.abs(x.i - a.i)) >= 2;
+    const b = ranked.find(x => far(x) && x.w >= a.w * 0.15) || { h: (a.h + 40) % 360, s: a.s };
+    const sat = v => Math.max(0.45, Math.min(0.85, v));
+    return { from: hsl2hex(a.h, sat(a.s), 0.87), to: hsl2hex(b.h, sat(b.s), 0.91), accent: hsl2hex(a.h, Math.max(0.5, Math.min(0.75, a.s)), 0.42) };
+}
+
+const profiles = new Map();
+const profile = soopId =>
+    remember(profiles, soopId, async () => {
+        const buf = await profileBuf(soopId);
+        // config.json의 theme {from, to, accent}가 있으면 사진 색 대신 그 색을 쓴다
+        const [avatar, colors] = await Promise.all([thumbOf(`profile|${soopId}`, buf, 120), config.theme || paletteOf(buf)]);
+        return { avatar, colors };
+    }).then(v => v || { avatar: null, colors: config.theme || NEUTRAL });
 
 // 이모지는 Twemoji 그림으로 그린다(Pretendard에 없음)
 const emojis = new Map();
@@ -81,10 +131,6 @@ async function loadAdditionalAsset(code, segment) {
         return buf && dataUri('image/svg+xml', buf);
     }).then(v => v || '');
 }
-
-const avatarUrl = (soopId, post) =>
-    post?.profileImage || `https://profile.img.sooplive.com/LOGO/${soopId.slice(0, 2)}/${soopId}/${soopId}.jpg`;
-const profile = url => Promise.all([thumb(url, 160), banner(url)]);
 
 const CARD_W = 600;
 const card = (...children) =>
@@ -101,20 +147,22 @@ const card = (...children) =>
         )
     );
 
-// 머리: 프로필 색 배경 위에 살짝 어두운 막을 덮는다. 글자 쪽은 position:relative여야 배경 위에 그려진다.
-const hero = (bg, content) =>
+// 머리: 프로필 색 파스텔 그라데이션 + 왼쪽 위 은은한 빛. 글자는 진하게.
+const hero = (colors, content) =>
     h(
         'div',
-        { position: 'relative', overflow: 'hidden', color: '#fff' },
-        bg && img(bg, CARD_W, 160, { position: 'absolute', left: 0, top: '50%', marginTop: -80, objectFit: 'cover' }),
-        h('div', { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundImage: bg ? 'linear-gradient(180deg, rgba(20,20,24,0.04), rgba(20,20,24,0.3))' : 'linear-gradient(135deg, #3f3f46, #18181b)' }),
-        h('div', { position: 'relative', flex: 1 }, content)
+        {
+            color: C.ink,
+            backgroundImage: `radial-gradient(circle at 12% 0%, rgba(255,255,255,0.75), rgba(255,255,255,0) 55%), linear-gradient(120deg, ${colors.from}, ${colors.to})`,
+            borderBottom: '1px solid rgba(24,24,27,0.06)',
+        },
+        content
     );
 
 const avatarImg = (avatar, size) =>
     avatar
-        ? img(avatar, size, size, { borderRadius: size, border: '2px solid rgba(255,255,255,0.9)', objectFit: 'cover' })
-        : h('div', { width: size, height: size, borderRadius: size, background: 'rgba(255,255,255,0.3)' });
+        ? img(avatar, size, size, { borderRadius: size, border: '2.5px solid #fff', objectFit: 'cover', boxShadow: '0 2px 8px rgba(24,24,27,0.15)' })
+        : h('div', { width: size, height: size, borderRadius: size, background: 'rgba(255,255,255,0.7)' });
 
 const button = (label, dark) =>
     h(
@@ -142,23 +190,23 @@ function paragraphs(text, { lines, fontSize, lineHeight, color, marginTop, width
 export async function renderNotice({ name, soopId, post, lines = 3, format = 'png' }) {
     const featured = Number(lines) > 3;
     const photosAll = (post?.photos || []).map(p => p?.url).filter(Boolean);
-    const [[avatar, bg], ...photos] = await Promise.all([
-        profile(avatarUrl(soopId, post)),
+    const [{ avatar, colors }, ...photos] = await Promise.all([
+        profile(soopId),
         ...photosAll.slice(0, featured ? 4 : 1).map(u => thumb(u, 264)),
     ]);
     const shown = photos.filter(Boolean);
     const extra = photosAll.length - shown.length;
 
     const head = hero(
-        bg,
+        colors,
         h(
             'div',
             { flex: 1, alignItems: 'center', gap: 12, padding: featured ? '16px 22px' : '12px 20px' },
             avatarImg(avatar, featured ? 42 : 34),
             h('div', { flex: 1, flexDirection: 'column' },
                 h('div', { fontSize: featured ? 15 : 14, fontWeight: 800 }, name),
-                post && h('div', { fontSize: featured ? 12.5 : 12, opacity: 0.85, marginTop: 2 }, formatPostDate(post.regDate))),
-            featured && h('div', { fontSize: 11.5, fontWeight: 800, letterSpacing: '0.04em', color: C.ink, background: 'rgba(255,255,255,0.92)', borderRadius: 999, padding: '5px 11px' }, 'NEW')
+                post && h('div', { fontSize: featured ? 12.5 : 12, color: C.sub, marginTop: 2 }, formatPostDate(post.regDate))),
+            featured && h('div', { fontSize: 11.5, fontWeight: 800, letterSpacing: '0.04em', color: '#fff', background: colors.accent, borderRadius: 999, padding: '5px 11px' }, 'NEW')
         )
     );
     if (!post) return out(format, card(head, h('div', { padding: '20px 24px 22px', fontSize: 15, color: C.faint }, '아직 글이 없습니다')));
@@ -188,22 +236,22 @@ export async function renderNotice({ name, soopId, post, lines = 3, format = 'pn
 
 // format: 'png'(뱃지) 또는 'svg'(편집 화면 미리보기: 그림으로 바꾸지 않아 훨씬 빠르다)
 export async function renderSchedule({ name, soopId, days, today, footer, format = 'png' }) {
-    const [avatar, bg] = await profile(avatarUrl(soopId));
+    const { avatar, colors } = await profile(soopId);
     const head = hero(
-        bg,
+        colors,
         h('div', { flex: 1, alignItems: 'center', gap: 14, padding: '24px 26px 22px' },
             avatarImg(avatar, 52),
             h('div', { flex: 1, flexDirection: 'column' },
-                h('div', { fontSize: 12.5, fontWeight: 600, opacity: 0.85 }, '이번 주 방송 일정'),
+                h('div', { fontSize: 12.5, fontWeight: 700, color: colors.accent }, '이번 주 방송 일정'),
                 h('div', { fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', marginTop: 3 }, name)),
-            h('div', { fontSize: 13, fontWeight: 700, background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 999, padding: '7px 13px' },
+            h('div', { fontSize: 13, fontWeight: 700, color: C.body, background: 'rgba(255,255,255,0.7)', borderRadius: 999, padding: '7px 13px' },
                 `${mmdd(days[0].date)} – ${mmdd(days[6].date)}`))
     );
     const rows = days.map(({ date, offAir, events }) => {
         const wd = weekdayOf(date);
         const isToday = date === today;
         const wdColor = isToday ? 'rgba(255,255,255,0.7)' : wd === '일' ? C.red : wd === '토' ? C.blue : C.sub;
-        const dayBox = h('div', { width: 52, height: 52, flexShrink: 0, borderRadius: 15, background: isToday ? C.ink : C.tint, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: offAir && !isToday ? 0.55 : 1 },
+        const dayBox = h('div', { width: 52, height: 52, flexShrink: 0, borderRadius: 15, background: isToday ? colors.accent : C.tint, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: offAir && !isToday ? 0.55 : 1 },
             h('div', { fontSize: 12, fontWeight: 700, color: wdColor }, wd),
             h('div', { fontSize: 18, fontWeight: 800, lineHeight: 1.1, color: isToday ? '#fff' : C.ink }, String(Number(date.slice(8, 10)))));
         const items = [
