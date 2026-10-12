@@ -200,13 +200,11 @@ const eventColor = name => {
 };
 
 // 색은 머리 배경에만 쓰고, 버튼·NEW·오늘 칸은 회색 바탕에 진한 글자로 차분하게
-const button = (label, big) =>
-    h(
-        'div',
-        { alignItems: 'center', gap: 6, fontSize: big ? 13 : 12, fontWeight: 700, borderRadius: 999, padding: big ? '8px 14px 8px 16px' : '6px 12px 6px 13px', background: C.tint, color: C.ink },
-        label,
-        img(ARROW(C.ink), 12, 12)
-    );
+// 카드 오른쪽 아래 버튼(원글 보기·방송국 가기). 모든 뱃지에서 같은 크기·자리.
+const cornerButton = label =>
+    h('div', { justifyContent: 'flex-end', padding: '0 22px 20px' },
+        h('div', { alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, borderRadius: 999, padding: '8px 14px 8px 16px', background: C.tint, color: C.ink },
+            label, img(ARROW(C.ink), 12, 12)));
 
 const textBlock = (text, style) => h('div', { display: 'block', wordBreak: 'keep-all', overflow: 'hidden', ...style }, text);
 
@@ -256,18 +254,19 @@ export async function renderNotice({ name, soopId, theme, post, lines = 3, forma
 
     if (featured) {
         const size = (CARD_W - 48 - 8 * 3) / 4;
-        return out(format, card(head, h('div', { flexDirection: 'column', padding: '20px 24px 22px' },
+        return out(format, card(head, h('div', { flexDirection: 'column', padding: '20px 24px 18px' },
             title, body,
             shown.length > 0 && h('div', { gap: 8, marginTop: 16 },
                 shown.map((src, i) => h('div', { position: 'relative', width: size, height: size, borderRadius: 14, overflow: 'hidden', background: C.tint },
-                    img(src, size, size, { objectFit: 'cover' }), i === shown.length - 1 && more(extra)))),
-            h('div', { justifyContent: 'flex-end', marginTop: 18 }, button('원글 보기', true)))));
+                    img(src, size, size, { objectFit: 'cover' }), i === shown.length - 1 && more(extra))))),
+            cornerButton('원글 보기')));
     }
-    return out(format, card(head, h('div', { alignItems: 'center', gap: 16, padding: '16px 20px 18px' },
-        h('div', { flex: 1, flexDirection: 'column' }, title, body, h('div', { marginTop: 12 }, button('원글 보기'))),
+    return out(format, card(head, h('div', { alignItems: 'center', gap: 16, padding: '16px 20px 12px' },
+        h('div', { flex: 1, flexDirection: 'column' }, title, body),
         shown[0] && h('div', { position: 'relative', width: 100, height: 100, borderRadius: 16, overflow: 'hidden', background: C.tint },
             img(shown[0], 100, 100, { objectFit: 'cover' }),
-            extra > 0 && h('div', { position: 'absolute', right: 6, bottom: 6, fontSize: 12.5, fontWeight: 800, color: '#fff', background: 'rgba(24,24,27,0.65)', borderRadius: 999, padding: '3px 8px' }, `+${extra}`)))));
+            extra > 0 && h('div', { position: 'absolute', right: 6, bottom: 6, fontSize: 12.5, fontWeight: 800, color: '#fff', background: 'rgba(24,24,27,0.65)', borderRadius: 999, padding: '3px 8px' }, `+${extra}`))),
+        cornerButton('원글 보기')));
 }
 
 // 일정 한 줄: [시간] [누가(일정 색 글자)] 내용. timeCol이면 시간이 없어도 칸을 비워 둔다.
@@ -303,7 +302,7 @@ export async function renderSchedule({ name, soopId, theme, days, today, footer,
     });
     return out(format, card(head,
         h('div', { flexDirection: 'column', padding: '8px 14px' }, rows),
-        footer && h('div', { justifyContent: 'center', padding: '6px 0 20px' }, button(footer, true))));
+        footer && cornerButton(footer)));
 }
 
 const CAL_W = 780; // 캄몬스타즈 오늘의 일정·달력 가로
