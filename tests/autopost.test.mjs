@@ -134,6 +134,8 @@ test('긴 제목/100문단/사진 7장을 모두 포함하고 위험한 HTML은 
     const body = articleBody('soju2022', p, [{ fileUrl: 'https://storage2.ygosu.com/?code=Stest.123', code: 'Stest.123', part: '1/1' }]);
     assert.ok(body.includes('/post/1'));
     assert.ok(body.includes('data-storage-code="Stest.123"'));
+    assert.match(body, /<a href="https:[^"]*\/post\/1"[^>]*><img /);
+    assert.ok(!body.includes('SOOP 원문 보기'));
     assert.throws(() => articleBody('soju2022', p, [{ fileUrl: 'https://storage2.ygosu.com/?code=Sother', code: 'Stest.123', part: '1/1' }]), /첨부 코드 불일치/);
 });
 
