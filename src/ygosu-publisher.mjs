@@ -4,7 +4,7 @@ import { profile } from './render.mjs';
 import { captureNotice, noticeDocument } from './notice-document.mjs';
 import { createHash } from 'node:crypto';
 
-export async function ygosuPublisher(browser, { id, password, log = () => {} }) {
+export async function ygosuPublisher(browser, { id, password, log = () => {}, postingKeys = {} }) {
     if (!id || !password) throw new Error('YGOSU_ID와 YGOSU_PASSWORD Secrets가 필요합니다');
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const page = await context.newPage();
@@ -98,7 +98,8 @@ export async function ygosuPublisher(browser, { id, password, log = () => {} }) 
         async publish(post, uploads) {
             const subject = articleSubject(post);
             const body = articleBody(config.soopId, post, uploads);
-            const key = createHash('sha256').update(`soju:${BOARD}:${post.titleNo}`).digest('hex');
+            const key = postingKeys[String(post.titleNo)] || createHash('sha256').update(`soju:${BOARD}:${post.titleNo}`).digest('hex');
+            if (!/^[a-f0-9]{64}$/.test(key)) throw new Error('와고 등록 멱등키 확인 실패');
             const outcome = await page.evaluate(async ({ board, subject, body, codes, key, categoryCode }) => {
                 try {
                 const form = document.querySelector('form[name="writeform"]');
