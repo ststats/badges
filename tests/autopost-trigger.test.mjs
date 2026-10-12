@@ -86,4 +86,8 @@ test('Vercel에서 본문을 읽을 때 쿠키·COOKIE_KEY 대신 일회성 GitH
         assert.ok(url.endsWith('/autopost.yml/dispatches'));
         return { status: 204 };
     });
+    await dispatchPosting('dispatch-token', async (_url, opts) => {
+        assert.deepEqual(JSON.parse(opts.body).inputs, { diagnose_only: true, publish_latest: false, recover_pending: '' });
+        return { status: 204 };
+    }, { diagnoseOnly: true });
 });

@@ -24,11 +24,11 @@ export async function detectAndDispatch({ posts, rpc, secret, dispatch }) {
     }
 }
 
-export async function dispatchPosting(token, fetcher = fetch) {
+export async function dispatchPosting(token, fetcher = fetch, { diagnoseOnly = false } = {}) {
     if (!token) throw new Error('Missing GitHub dispatch credential');
     const response = await fetcher('https://api.github.com/repos/ststats/badges/actions/workflows/autopost.yml/dispatches', {
         method: 'POST', headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28' },
-        body: JSON.stringify({ ref: 'main' }), signal: AbortSignal.timeout(10000),
+        body: JSON.stringify({ ref: 'main', ...(diagnoseOnly ? { inputs: { diagnose_only: true, publish_latest: false, recover_pending: '' } } : {}) }), signal: AbortSignal.timeout(10000),
     });
     if (response.status !== 204) throw new Error('Workflow dispatch rejected');
 }

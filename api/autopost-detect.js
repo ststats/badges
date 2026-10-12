@@ -13,6 +13,11 @@ export default async function handler(req, res) {
     if (process.env.AUTOPOST_DETECT_ENABLED !== 'true') return sendJson(res, 200, { dispatched: false, reason: 'disabled' });
     if (!process.env.GITHUB_DISPATCH_TOKEN) return sendJson(res, 503, { error: 'Dispatch credential missing' });
     try {
+        // 공유 비밀로 인증한 운영 진단만 허용한다. 감지 상태를 변경하거나 글을 쓰지 않는다.
+        if (req.query?.check === 'dispatch') {
+            await dispatchPosting(process.env.GITHUB_DISPATCH_TOKEN, fetch, { diagnoseOnly: true });
+            return sendJson(res, 200, { diagnosticDispatched: true });
+        }
         const posts = await collectPosts({ soopId: config.soopId, cookie: await currentCookie() });
         const result = await detectAndDispatch({ posts, secret, rpc, dispatch: () => dispatchPosting(process.env.GITHUB_DISPATCH_TOKEN) });
         return sendJson(res, 200, result);
