@@ -4,6 +4,11 @@ import { boardApiUrl, recentOwnPosts, escapeHTML, postUrl } from './lib.mjs';
 export const BOARD = 'pan_sojuyang';
 export const postTime = p => Date.parse(String(p.regDate).replace(' ', 'T') + '+09:00');
 
+export function articleSubject(post) {
+    if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(String(post.regDate)) || !Number.isFinite(postTime(post))) throw new Error('공지 제목 날짜 확인 실패');
+    return `${post.regDate.slice(2, 10).replaceAll('-', '')} 소주양 공지`;
+}
+
 export async function collectPosts({ soopId, cookie, since, fetcher = fetch }) {
     if (!cookie) throw new Error('SOOP_COOKIE 또는 저장된 SOOP 쿠키와 COOKIE_KEY가 필요합니다');
     const found = new Map();
