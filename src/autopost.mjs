@@ -54,16 +54,24 @@ export function articleBody(soopId, post, uploads) {
         + `<p><a href="${escapeHTML(postUrl(soopId, post.titleNo))}">SOOP 원문 보기</a></p>`;
 }
 
-export async function publishPosts({ state, posts, save, prepare, publish }) {
-    for (const post of newPosts(state, posts)) {
+export const coolingDown = (state, now = Date.now()) => Number.isFinite(state.lastPostedAt) && now - state.lastPostedAt < 5 * 60000;
+
+export async function publishPosts({ state, posts, save, prepare, publish, now = Date.now }) {
+    const candidates = newPosts(state, posts);
+    if (coolingDown(state, now()) || !candidates.length) return state;
+    // 배열 순서와 무관하게 최신 하나만 선택한다. 밀린 글을 루프로 전송하지 않는다.
+    const post = [...candidates].sort((a, b) => postTime(b) - postTime(a) || Number(b.titleNo) - Number(a.titleNo))[0];
         // 이미지 생성·업로드 실패는 글을 보내기 전이므로 다음 실행에서 다시 준비해도 된다.
         const prepared = await prepare(post);
+        for (const older of candidates) {
+            if (String(older.titleNo) !== String(post.titleNo)) state.done[String(older.titleNo)] = 'skipped';
+        }
         state.pending = { id: String(post.titleNo), at: new Date().toISOString() };
         await save(state); // 영구 저장에 성공하기 전에는 등록 요청을 보내지 않는다.
         const articleId = await publish(post, prepared);
         state.done[String(post.titleNo)] = articleId;
+        state.lastPostedAt = now();
         delete state.pending;
         await save(state); // 응답 이후 저장이 실패해도 원격 pending이 남아 재전송을 막는다.
-    }
     return state;
 }

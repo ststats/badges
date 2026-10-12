@@ -52,6 +52,25 @@ test('준비 실패 시 pending을 만들지 않아 재실행할 수 있다', as
     assert.equal(newPosts(s, [post(1)]).length, 1);
 });
 
+test('밀린 글 100개도 최신 하나만 전송하고 나머지는 영구적으로 건너뛴다', async () => {
+    const s = state();
+    const posts = Array.from({ length: 100 }, (_, i) => post(i + 1));
+    const sent = [];
+    const snapshots = [];
+    await publishPosts({ state: s, posts, prepare: async p => { sent.push(p.titleNo); return []; },
+        save: async v => { snapshots.push(structuredClone(v)); }, publish: async () => 900, now: () => 1000000 });
+    assert.deepEqual(sent, [100]);
+    assert.equal(s.done['100'], 900);
+    assert.equal(s.done['99'], 'skipped');
+    assert.equal(snapshots[0].done['1'], 'skipped');
+    assert.equal(newPosts(s, posts).length, 0);
+    // 재실행/수동 실행에서도 5분 안에는 추가 등록하지 않는다.
+    await publishPosts({ state: s, posts: [post(101)], prepare: () => assert.fail(), save: () => assert.fail(), publish: () => assert.fail(), now: () => 1000001 });
+    assert.equal(s.done['101'], undefined);
+    await publishPosts({ state: s, posts: [post(101)], prepare: async () => [], save: async () => {}, publish: async () => 901, now: () => 1300000 });
+    assert.equal(s.done['101'], 901);
+});
+
 test('긴 제목/100문단/사진 7장을 모두 포함하고 위험한 HTML은 제거한다', async () => {
     const p = post(1); p.titleName = '긴 제목 '.repeat(40);
     p.content.content = Array.from({ length: 100 }, (_, i) => `<p>본문 ${i} 끝</p>`).join('') + '<script>alert(1)</script>';

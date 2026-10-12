@@ -1,7 +1,7 @@
 import { chromium } from 'playwright';
 import { config } from '../src/config.mjs';
 import { currentCookie } from '../src/live.mjs';
-import { collectPosts, newPosts, publishPosts } from '../src/autopost.mjs';
+import { collectPosts, coolingDown, newPosts, publishPosts } from '../src/autopost.mjs';
 import { githubState } from '../src/autopost-state.mjs';
 import { ygosuPublisher } from '../src/ygosu-publisher.mjs';
 
@@ -11,6 +11,7 @@ async function main() {
     const store = await githubState({ repository: process.env.GITHUB_REPOSITORY, token: process.env.GITHUB_TOKEN });
     let state = store.state;
     if (state?.pending) newPosts(state, []);
+    if (state && coolingDown(state)) { console.log('최근 등록 후 5분 이내: 이번 실행은 건너뜁니다'); return; }
     const started = Date.now();
     const cookie = process.env.SOOP_COOKIE || await currentCookie();
     console.log('SOOP 공개/즐겨찾기 글 수집 및 접근 확인');
@@ -27,9 +28,11 @@ async function main() {
         console.log('와고 자동 로그인');
         const publisher = await ygosuPublisher(browser, { id: process.env.YGOSU_ID, password: process.env.YGOSU_PASSWORD });
         try {
+            const before = state.lastPostedAt;
             await publishPosts({ state, posts, save: store.save,
                 prepare: async p => { console.log('전체 공지 이미지 생성·업로드'); return publisher.prepare(p); },
                 publish: async (p, uploads) => { console.log('와고 글 등록'); return publisher.publish(p, uploads); } });
+            if (state.lastPostedAt === before) return;
             // 기준 시각을 앞으로 옮겨 다음 실행의 수집 범위를 줄인다. 번호 기록은 유지한다.
             state.since = started - 60000;
             await store.save(state);
