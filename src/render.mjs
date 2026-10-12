@@ -164,11 +164,13 @@ const avatarImg = (avatar, size) =>
         ? img(avatar, size, size, { borderRadius: size, border: '2.5px solid #fff', objectFit: 'cover', boxShadow: '0 2px 8px rgba(24,24,27,0.15)' })
         : h('div', { width: size, height: size, borderRadius: size, background: 'rgba(255,255,255,0.7)' });
 
-// 색은 머리 배경에만 쓰고, 버튼·NEW·오늘 칸은 회색 바탕에 진한 글자로 차분하게
-const button = (label, big) =>
+// 버튼은 머리 색을 흰색과 반씩 섞은 아주 연한 바탕에 검정 글자(글자까지 색을 넣으면 어지럽다)
+const mixWhite = (hexColor, t = 0.5) =>
+    hex(...[1, 3, 5].map(i => parseInt(hexColor.slice(i, i + 2), 16) * (1 - t) + 255 * t));
+const button = (label, colors, big) =>
     h(
         'div',
-        { alignItems: 'center', gap: 6, fontSize: big ? 13 : 12, fontWeight: 700, borderRadius: 999, padding: big ? '8px 14px 8px 16px' : '6px 12px 6px 13px', background: C.tint, color: C.ink },
+        { alignItems: 'center', gap: 6, fontSize: big ? 13 : 12, fontWeight: 700, borderRadius: 999, padding: big ? '8px 14px 8px 16px' : '6px 12px 6px 13px', background: mixWhite(colors.from), color: C.ink },
         label,
         img(ARROW(C.ink), 12, 12)
     );
@@ -226,10 +228,10 @@ export async function renderNotice({ name, soopId, post, lines = 3, format = 'pn
             shown.length > 0 && h('div', { gap: 8, marginTop: 16 },
                 shown.map((src, i) => h('div', { position: 'relative', width: size, height: size, borderRadius: 14, overflow: 'hidden', background: C.tint },
                     img(src, size, size, { objectFit: 'cover' }), i === shown.length - 1 && more(extra)))),
-            h('div', { justifyContent: 'flex-end', marginTop: 18 }, button('원글 보기', true)))));
+            h('div', { justifyContent: 'flex-end', marginTop: 18 }, button('원글 보기', colors, true)))));
     }
     return out(format, card(head, h('div', { alignItems: 'center', gap: 16, padding: '16px 20px 18px' },
-        h('div', { flex: 1, flexDirection: 'column' }, title, body, h('div', { marginTop: 12 }, button('원글 보기'))),
+        h('div', { flex: 1, flexDirection: 'column' }, title, body, h('div', { marginTop: 12 }, button('원글 보기', colors))),
         shown[0] && h('div', { position: 'relative', width: 100, height: 100, borderRadius: 16, overflow: 'hidden', background: C.tint },
             img(shown[0], 100, 100, { objectFit: 'cover' }),
             extra > 0 && h('div', { position: 'absolute', right: 6, bottom: 6, fontSize: 12.5, fontWeight: 800, color: '#fff', background: 'rgba(24,24,27,0.65)', borderRadius: 999, padding: '3px 8px' }, `+${extra}`)))));
@@ -268,7 +270,7 @@ export async function renderSchedule({ name, soopId, days, today, footer, format
     });
     return out(format, card(head,
         h('div', { flexDirection: 'column', padding: '8px 14px' }, rows),
-        footer && h('div', { justifyContent: 'center', padding: '6px 0 20px' }, button(footer, true))));
+        footer && h('div', { justifyContent: 'center', padding: '6px 0 20px' }, button(footer, colors, true))));
 }
 
 const toSvg = async tree => satori(tree, { width: CARD_W + 28, fonts: await loadFonts(), loadAdditionalAsset });
