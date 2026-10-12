@@ -89,8 +89,8 @@ function rgb2hsl(r, g, b) {
 }
 
 // 사진의 선명한 색을 색상(12칸)별로 모아 가장 많은 색과, 그와 60도 이상 떨어진 다음 색을 고른다.
-// 머리 배경은 그 두 색의 밝은 파스텔 그라데이션, accent는 같은 색의 진한 판(작은 강조용).
-const NEUTRAL = { from: '#eceef3', to: '#f5f5f7', accent: '#3f3f46' };
+// 머리 배경은 그 두 색의 밝은 파스텔 그라데이션.
+const NEUTRAL = { from: '#eceef3', to: '#f5f5f7' };
 async function paletteOf(buf) {
     if (!buf) return NEUTRAL;
     const data = await sharp(buf, { animated: false }).resize(24, 24, { fit: 'cover' }).removeAlpha().raw().toBuffer();
@@ -108,14 +108,14 @@ async function paletteOf(buf) {
     const far = x => Math.min(Math.abs(x.i - a.i), 12 - Math.abs(x.i - a.i)) >= 2;
     const b = ranked.find(x => far(x) && x.w >= a.w * 0.15) || { h: (a.h + 40) % 360, s: a.s };
     const sat = v => Math.max(0.45, Math.min(0.85, v));
-    return { from: hsl2hex(a.h, sat(a.s), 0.87), to: hsl2hex(b.h, sat(b.s), 0.91), accent: hsl2hex(a.h, Math.max(0.5, Math.min(0.75, a.s)), 0.42) };
+    return { from: hsl2hex(a.h, sat(a.s), 0.87), to: hsl2hex(b.h, sat(b.s), 0.91) };
 }
 
 const profiles = new Map();
 const profile = soopId =>
     remember(profiles, soopId, async () => {
         const buf = await profileBuf(soopId);
-        // config.json의 theme {from, to, accent}가 있으면 사진 색 대신 그 색을 쓴다
+        // config.json의 theme {from, to}가 있으면 사진 색 대신 그 색을 쓴다
         const [avatar, colors] = await Promise.all([thumbOf(`profile|${soopId}`, buf, 120), config.theme || paletteOf(buf)]);
         return { avatar, colors };
     }).then(v => v || { avatar: null, colors: config.theme || NEUTRAL });
@@ -164,14 +164,13 @@ const avatarImg = (avatar, size) =>
         ? img(avatar, size, size, { borderRadius: size, border: '2.5px solid #fff', objectFit: 'cover', boxShadow: '0 2px 8px rgba(24,24,27,0.15)' })
         : h('div', { width: size, height: size, borderRadius: size, background: 'rgba(255,255,255,0.7)' });
 
-// 버튼·NEW·오늘 칸은 머리와 같은 연한 색 바탕에 진한 색(accent) 글자
-const soft = colors => ({ background: colors.from, color: colors.accent });
-const button = (label, colors, big) =>
+// 색은 머리 배경에만 쓰고, 버튼·NEW·오늘 칸은 회색 바탕에 진한 글자로 차분하게
+const button = (label, big) =>
     h(
         'div',
-        { alignItems: 'center', gap: 6, fontSize: big ? 13 : 12, fontWeight: 700, borderRadius: 999, padding: big ? '8px 14px 8px 16px' : '6px 12px 6px 13px', ...soft(colors) },
+        { alignItems: 'center', gap: 6, fontSize: big ? 13 : 12, fontWeight: 700, borderRadius: 999, padding: big ? '8px 14px 8px 16px' : '6px 12px 6px 13px', background: C.tint, color: C.ink },
         label,
-        img(ARROW(colors.accent), 12, 12)
+        img(ARROW(C.ink), 12, 12)
     );
 
 const textBlock = (text, style) => h('div', { display: 'block', wordBreak: 'keep-all', overflow: 'hidden', ...style }, text);
@@ -208,7 +207,7 @@ export async function renderNotice({ name, soopId, post, lines = 3, format = 'pn
             h('div', { flex: 1, flexDirection: 'column' },
                 h('div', { fontSize: featured ? 15 : 14, fontWeight: 800 }, name),
                 post && h('div', { fontSize: featured ? 12.5 : 12, color: C.sub, marginTop: 2 }, formatPostDate(post.regDate))),
-            featured && h('div', { fontSize: 11.5, fontWeight: 800, letterSpacing: '0.04em', borderRadius: 999, padding: '5px 11px', background: 'rgba(255,255,255,0.8)', color: colors.accent }, 'NEW')
+            featured && h('div', { fontSize: 11.5, fontWeight: 800, letterSpacing: '0.04em', borderRadius: 999, padding: '5px 11px', background: 'rgba(255,255,255,0.85)', color: C.ink }, 'NEW')
         )
     );
     if (!post) return out(format, card(head, h('div', { padding: '20px 24px 22px', fontSize: 15, color: C.faint }, '아직 글이 없습니다')));
@@ -227,10 +226,10 @@ export async function renderNotice({ name, soopId, post, lines = 3, format = 'pn
             shown.length > 0 && h('div', { gap: 8, marginTop: 16 },
                 shown.map((src, i) => h('div', { position: 'relative', width: size, height: size, borderRadius: 14, overflow: 'hidden', background: C.tint },
                     img(src, size, size, { objectFit: 'cover' }), i === shown.length - 1 && more(extra)))),
-            h('div', { justifyContent: 'flex-end', marginTop: 18 }, button('원글 보기', colors, true)))));
+            h('div', { justifyContent: 'flex-end', marginTop: 18 }, button('원글 보기', true)))));
     }
     return out(format, card(head, h('div', { alignItems: 'center', gap: 16, padding: '16px 20px 18px' },
-        h('div', { flex: 1, flexDirection: 'column' }, title, body, h('div', { marginTop: 12 }, button('원글 보기', colors))),
+        h('div', { flex: 1, flexDirection: 'column' }, title, body, h('div', { marginTop: 12 }, button('원글 보기'))),
         shown[0] && h('div', { position: 'relative', width: 100, height: 100, borderRadius: 16, overflow: 'hidden', background: C.tint },
             img(shown[0], 100, 100, { objectFit: 'cover' }),
             extra > 0 && h('div', { position: 'absolute', right: 6, bottom: 6, fontSize: 12.5, fontWeight: 800, color: '#fff', background: 'rgba(24,24,27,0.65)', borderRadius: 999, padding: '3px 8px' }, `+${extra}`)))));
@@ -244,7 +243,7 @@ export async function renderSchedule({ name, soopId, days, today, footer, format
         h('div', { flex: 1, alignItems: 'center', gap: 14, padding: '24px 26px 22px' },
             avatarImg(avatar, 52),
             h('div', { flex: 1, flexDirection: 'column' },
-                h('div', { fontSize: 12.5, fontWeight: 700, color: colors.accent }, '이번 주 방송 일정'),
+                h('div', { fontSize: 12.5, fontWeight: 600, color: C.sub }, '이번 주 방송 일정'),
                 h('div', { fontSize: 24, fontWeight: 800, letterSpacing: '-0.03em', marginTop: 3 }, name)),
             h('div', { fontSize: 13, fontWeight: 700, color: C.body, background: 'rgba(255,255,255,0.7)', borderRadius: 999, padding: '7px 13px' },
                 `${mmdd(days[0].date)} – ${mmdd(days[6].date)}`))
@@ -252,10 +251,10 @@ export async function renderSchedule({ name, soopId, days, today, footer, format
     const rows = days.map(({ date, offAir, events }) => {
         const wd = weekdayOf(date);
         const isToday = date === today;
-        const wdColor = isToday ? colors.accent : wd === '일' ? C.red : wd === '토' ? C.blue : C.sub;
-        const dayBox = h('div', { width: 52, height: 52, flexShrink: 0, borderRadius: 15, background: isToday ? colors.from : C.tint, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: offAir && !isToday ? 0.55 : 1 },
+        const wdColor = isToday ? C.ink : wd === '일' ? C.red : wd === '토' ? C.blue : C.sub;
+        const dayBox = h('div', { width: 52, height: 52, flexShrink: 0, borderRadius: 15, background: isToday ? '#fff' : C.tint, boxShadow: isToday ? '0 0 0 1.5px rgba(24,24,27,0.12), 0 2px 6px rgba(24,24,27,0.08)' : 'none', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', opacity: offAir && !isToday ? 0.55 : 1 },
             h('div', { fontSize: 12, fontWeight: 700, color: wdColor }, wd),
-            h('div', { fontSize: 18, fontWeight: 800, lineHeight: 1.1, color: isToday ? colors.accent : C.ink }, String(Number(date.slice(8, 10)))));
+            h('div', { fontSize: 18, fontWeight: 800, lineHeight: 1.1, color: C.ink }, String(Number(date.slice(8, 10)))));
         const items = [
             offAir && h('div', { alignSelf: 'flex-start', alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 700, color: C.sub, background: isToday ? '#fff' : C.tint, borderRadius: 999, padding: '5px 12px 5px 10px' }, img(MOON, 13, 13), '휴방'),
             // 그날 시간이 있는 일정이 하나라도 있으면 시간 칸을 비워서라도 맞춘다
@@ -269,7 +268,7 @@ export async function renderSchedule({ name, soopId, days, today, footer, format
     });
     return out(format, card(head,
         h('div', { flexDirection: 'column', padding: '8px 14px' }, rows),
-        footer && h('div', { justifyContent: 'center', padding: '6px 0 20px' }, button(footer, colors, true))));
+        footer && h('div', { justifyContent: 'center', padding: '6px 0 20px' }, button(footer, true))));
 }
 
 const toSvg = async tree => satori(tree, { width: CARD_W + 28, fonts: await loadFonts(), loadAdditionalAsset });
