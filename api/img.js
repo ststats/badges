@@ -10,7 +10,7 @@ import { config } from '../src/config.mjs';
 import { noticeIndex, query } from '../src/http.mjs';
 import { eventsOn, kstToday, monthWeeks, parseSchedule, weekSchedule } from '../src/lib.mjs';
 import { recentPosts, scheduleFile } from '../src/live.mjs';
-import { starSchedule } from '../src/staruniv.mjs';
+import { starLogo, starSchedule } from '../src/staruniv.mjs';
 
 // 그림 도구(satori·sharp·resvg)는 실제로 그릴 때만 불러온다(돌려보내기만 하는 요청이 가볍게 뜨게)
 let renderer;
@@ -31,7 +31,8 @@ const slimPost = p =>
     };
 
 const soju = { name: config.name, soopId: config.soopId, theme: config.theme };
-const star = { name: config.staruniv.name, logo: config.staruniv.logo, theme: config.staruniv.theme, footer: config.staruniv.footer };
+// 캄몬스타즈 로고(못 읽으면 로고 자리만 비운다)
+const star = async () => ({ name: config.staruniv.name, logo: await starLogo().catch(() => null), square: true });
 
 // 뱃지마다: 그림에 들어갈 값(args)과 그릴 함수, 고정 주소를 CDN이 기억할 초(fresh)
 // 소주양 일정은 편집 화면에서 저장하면 바로 바뀌므로 20초, 나머지는 1분
@@ -50,17 +51,17 @@ const BADGES = {
         async today() {
             const now = Date.now();
             const date = kstToday(now);
-            const { events, offAir } = await starSchedule();
-            return { args: { ...star, date, events: eventsOn(events, date), offAir: offAir[date] || [] }, draw: 'renderToday', fresh: 60 };
+            const [{ events, offAir }, who] = await Promise.all([starSchedule(), star()]);
+            return { args: { ...who, date, events: eventsOn(events, date), offAir: offAir[date] || [] }, draw: 'renderToday', fresh: 60 };
         },
         async calendar() {
             const now = Date.now();
-            const { events, holidays } = await starSchedule();
+            const [{ events, holidays }, who] = await Promise.all([starSchedule(), star()]);
             const weeks = monthWeeks(now);
             const [first, last] = [weeks[0][0].date, weeks.at(-1)[6].date];
             return {
                 // 이번 달 칸에 걸치는 일정과 공휴일만 넣는다(다른 달 일정이 바뀌어도 다시 그리지 않게)
-                args: { ...star, weeks, today: kstToday(now),
+                args: { ...who, footer: config.staruniv.footer, weeks, today: kstToday(now),
                     events: events.filter(ev => ev.date <= last && (ev.end || ev.date) >= first),
                     holidays: [...holidays].filter(d => d >= first && d <= last).sort() },
                 draw: 'renderCalendar', fresh: 60,

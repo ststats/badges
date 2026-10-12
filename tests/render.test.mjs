@@ -24,7 +24,7 @@ test('글 뱃지를 PNG로 그린다(글 없음 포함)', async () => {
 test('스타유니브 오늘의 일정·달력을 PNG로 그린다(로고·사진을 못 받아도)', async () => {
     const now = Date.parse('2026-10-12T03:00:00Z');
     const events = [{ date: '2026-10-12', end: '2026-10-14', time: '20:00', who: '캄몬', text: '종겜', color: 'blue', order: 0 }];
-    const star = { name: '캄몬스타즈', logo: 'http://127.0.0.1:9/none.webp' };
+    const star = { name: '캄몬스타즈', logo: 'http://127.0.0.1:9/none.webp', square: true };
     const offAir = [{ soopId: 'no-such-user-for-test', name: '누구' }];
     assert.deepEqual((await renderToday({ ...star, date: '2026-10-12', events, offAir })).subarray(0, 4), PNG);
     assert.deepEqual((await renderToday({ ...star, date: '2026-10-12', events: [] })).subarray(0, 4), PNG);

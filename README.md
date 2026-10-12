@@ -8,8 +8,8 @@
 |---|---|---|---|
 | 소주양 | 최근 글 1~3 | `/soju/notice-1.png` ~ `/soju/notice-3.png` | `/soju/n/1` ~ `/soju/n/3` → 지금의 그 글(SOOP 원글) |
 | 소주양 | 주간 일정(월~일) | `/soju/schedule.png` | `/soju/s` → 소주양 방송국 |
-| 캄몬스타즈 | 오늘의 일정(일정 + 휴방 멤버) | `/staruniv/today.png` | `/staruniv/s` → 스타유니브 일정 페이지 |
-| 캄몬스타즈 | 이번 달 달력(일~토) | `/staruniv/calendar.png` | `/staruniv/s` |
+| 캄몬스타즈 | 오늘의 일정(일정 + 휴방 멤버) | `/staruniv/today.png` | (링크 없음) |
+| 캄몬스타즈 | 이번 달 달력(일~토) | `/staruniv/calendar.png` | `/staruniv/s` → 스타유니브 일정 페이지 |
 
 붙여 넣을 코드는 Vercel 주소 첫 화면에 있습니다. 예:
 
@@ -86,13 +86,17 @@ SOOP 방송국 게시판 첫 쪽에서 소주양 본인 글(고정 공지 포함
 
 ## 캄몬스타즈 일정
 
-사진·색은 스타유니브 로고에서, 일정 색은 사이트 달력과 같은 색 이름을 씁니다. 오늘의 일정은 사이트처럼 휴방 멤버를
+로고는 스타유니브 관리자 '팀 로고'에 올린 캄몬스타즈 로고를 이름으로 찾아 씁니다(바꾸면 10분 안에 반영).
+머리 색은 그 로고에서, 달력 일정 색은 사이트 달력과 같은 색 이름을 씁니다. 오늘의 일정은 사이트처럼 휴방 멤버를
 사진·이름으로(없으면 '없음'), 달력은 칸마다 일정 6개까지(넘치면 `+N`), 공휴일은 빨간 날짜.
-이름·로고·링크·버튼 글자는 `config.json`의 `staruniv`에서 바꿉니다. 예전 크롬 캡처 달력은 없앴고,
-`https://staruniv.vercel.app/calendar.png`는 이 달력 뱃지로 보냅니다.
+예전 크롬 캡처 달력은 없앴고, `https://staruniv.vercel.app/calendar.png`는 이 달력 뱃지로 보냅니다.
 
-대상·링크 등은 `config.json`에서 바꿉니다. 머리 배경은 프로필 사진에서 뽑은 두 색의 파스텔 그라데이션이고,
-`"theme": {"from": "#e8eefc", "to": "#f3f0fb"}`처럼 넣으면 그 색으로 고정됩니다.
+## 설정
+
+- 이름·글 수·줄 수·버튼 글자: `config.json` (`staruniv.name`은 팀 로고를 찾는 이름이기도 합니다)
+- 누르면 가는 곳(`/soju/s`, `/staruniv/s`): `vercel.json`의 `redirects`
+- 소주양 머리 배경은 프로필 사진에서 뽑은 두 색의 파스텔 그라데이션이고,
+  `config.json`에 `"theme": {"from": "#e8eefc", "to": "#f3f0fb"}`처럼 넣으면 그 색으로 고정됩니다.
 
 ## GitHub Pages 판(그만둠)
 

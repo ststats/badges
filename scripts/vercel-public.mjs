@@ -24,10 +24,10 @@ const groups = [
     {
         name: config.staruniv.name,
         badges: [
-            { img: 'staruniv/today.png', link: 'staruniv/s', label: '오늘의 일정' },
+            { img: 'staruniv/today.png', label: '오늘의 일정' }, // 누를 일이 없어 링크 없이
             { img: 'staruniv/calendar.png', link: 'staruniv/s', label: '이번 달 일정' },
         ],
-        note: '스타유니브 관리자 화면에서 일정·휴방을 고치면 1분 안에 바뀝니다. 누르면 스타유니브 일정 페이지로 갑니다.',
+        note: '스타유니브 관리자 화면에서 일정·휴방을 고치면 1분 안에 바뀝니다. 달력을 누르면 스타유니브 일정 페이지로 갑니다.',
     },
 ];
 await fs.writeFile(
@@ -40,10 +40,11 @@ img{max-width:100%}textarea{width:100%;height:64px;font:12px monospace;margin-to
 <h1>뱃지 모음</h1>
 <p>아래 코드를 커뮤니티 글(HTML 편집)에 붙이면 됩니다. 그림은 볼 때마다 지금 내용으로 바뀝니다(최대 1분 지연).</p>
 ${groups.map(g => `<h2>${esc(g.name)}</h2><p>${g.note}</p>
-${g.badges.map(b => `<section data-img="${b.img}" data-link="${b.link}" data-label="${esc(`${g.name} ${b.label}`)}"><h3>${esc(b.label)}</h3></section>`).join('\n')}`).join('\n')}
+${g.badges.map(b => `<section data-img="${b.img}" data-link="${b.link || ''}" data-label="${esc(`${g.name} ${b.label}`)}"><h3>${esc(b.label)}</h3></section>`).join('\n')}`).join('\n')}
 <script>
 for (const s of document.querySelectorAll('section')) {
-    const code = '<a href="' + location.origin + '/' + s.dataset.link + '"><img src="' + location.origin + '/' + s.dataset.img + '" alt="' + s.dataset.label + '"></a>';
+    const image = '<img src="' + location.origin + '/' + s.dataset.img + '" alt="' + s.dataset.label + '">';
+    const code = s.dataset.link ? '<a href="' + location.origin + '/' + s.dataset.link + '">' + image + '</a>' : image;
     s.insertAdjacentHTML('beforeend', code);
     const t = document.createElement('textarea');
     t.readOnly = true; t.value = code; t.onclick = () => t.select();

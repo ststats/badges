@@ -4,7 +4,7 @@ import path from 'node:path';
 import satori from 'satori';
 import sharp from 'sharp';
 import { Resvg } from '@resvg/resvg-js';
-import { config, root } from './config.mjs';
+import { root } from './config.mjs';
 import { eventsOn, formatPostDate, mmdd, postText, weekdayOf } from './lib.mjs';
 
 let fontsPromise = null;
@@ -57,6 +57,14 @@ const thumbOf = (key, buf, size) =>
     remember(thumbs, `${size}|${key}`, async () =>
         buf && dataUri('image/png', await sharp(buf, { animated: false }).rotate().resize(size, size, { fit: 'cover' }).png().toBuffer()));
 const thumb = async (url, size) => thumbOf(url, await download(url), size);
+// 로고: 자르지 않고 흰 바탕 가운데에 여백을 두고 넣는다(투명 배경 로고)
+const logoOf = (key, buf, size) =>
+    remember(thumbs, `logo|${size}|${key}`, async () => {
+        const pad = Math.round(size * 0.05);
+        const inner = await sharp(buf, { animated: false }).resize(size - pad * 2, size - pad * 2, { fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 0 } }).png().toBuffer();
+        const png = await sharp(inner).extend({ top: pad, bottom: pad, left: pad, right: pad, background: { r: 255, g: 255, b: 255, alpha: 0 } }).flatten({ background: '#ffffff' }).png().toBuffer();
+        return dataUri('image/png', png);
+    });
 
 // ----- 프로필: 사진과 그 사진에서 뽑은 색 -----
 // SOOP 프로필 원본(.jpg 주소)은 1MB가 넘는 움짤 GIF라, 같은 사진의 작은 판(/m/, 100px webp)을 먼저 받는다.
@@ -114,9 +122,11 @@ async function paletteOf(buf) {
 // 뱃지 주인: SOOP 프로필(soopId) 또는 로고 주소(logo). theme {from, to}가 있으면 사진 색 대신 그 색.
 const profiles = new Map();
 const profile = ({ soopId, logo, theme }) =>
-    remember(profiles, logo || soopId, async () => {
+    remember(profiles, logo || soopId || '', async () => {
         const buf = logo ? await download(logo) : await profileBuf(soopId);
-        const [avatar, colors] = await Promise.all([thumbOf(`profile|${logo || soopId}`, buf, 120), theme || paletteOf(buf)]);
+        const avatar = !buf ? null : logo ? logoOf(logo, buf, 120) : thumbOf(`profile|${soopId}`, buf, 120);
+        const [avatarUri, colors] = await Promise.all([avatar, theme || paletteOf(buf)]);
+        return { avatar: avatarUri, colors };
         return { avatar, colors };
     }).then(v => v || { avatar: null, colors: theme || NEUTRAL });
 
@@ -213,11 +223,11 @@ function paragraphs(text, { lines, fontSize, lineHeight, color, marginTop, width
 }
 
 // lines가 3보다 크면 최신 글(본문을 길게, 사진을 아래에 크게), 아니면 사진 한 장을 오른쪽에 작게
-export async function renderNotice({ name, soopId, post, lines = 3, format = 'png' }) {
+export async function renderNotice({ name, soopId, theme, post, lines = 3, format = 'png' }) {
     const featured = Number(lines) > 3;
     const photosAll = (post?.photos || []).map(p => p?.url).filter(Boolean);
     const [{ avatar, colors }, ...photos] = await Promise.all([
-        profile({ soopId, theme: config.theme }),
+        profile({ soopId, theme }),
         ...photosAll.slice(0, featured ? 4 : 1).map(u => thumb(u, 264)),
     ]);
     const shown = photos.filter(Boolean);
@@ -260,18 +270,15 @@ export async function renderNotice({ name, soopId, post, lines = 3, format = 'pn
             extra > 0 && h('div', { position: 'absolute', right: 6, bottom: 6, fontSize: 12.5, fontWeight: 800, color: '#fff', background: 'rgba(24,24,27,0.65)', borderRadius: 999, padding: '3px 8px' }, `+${extra}`)))));
 }
 
-// 일정 한 줄: [시간] [색 점 + 누가] 내용. timeCol이면 시간이 없어도 칸을 비워 둔다.
-const eventLine = (ev, timeCol) => {
-    const color = eventColor(ev.color);
-    const text = h('div', { fontSize: 16, fontWeight: 700, lineHeight: 1.4, wordBreak: 'keep-all' }, ev.text);
+// 일정 한 줄: [시간] [누가] 내용. timeCol이면 시간이 없어도 칸을 비워 둔다.
+// even이면 시간·누가도 내용과 같은 크기(오늘의 일정), 아니면 시간을 조금 작게(주간 일정).
+const eventLine = (ev, timeCol, even) => {
+    const digit = /^\d/.test(ev.time);
     return h('div', { alignItems: 'baseline', gap: 12 },
-        timeCol && h('div', { width: 46, flexShrink: 0, fontSize: /^\d/.test(ev.time) ? 14 : 12.5, fontWeight: 700, color: /^\d/.test(ev.time) ? C.sub : C.faint }, ev.time === '시간미정' ? '미정' : ev.time || ' '),
-        ev.who
-            ? h('div', { flex: 1, alignItems: 'baseline', flexWrap: 'wrap', columnGap: 8 },
-                h('div', { alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 700, color: color?.text || C.sub },
-                    color && h('div', { width: 8, height: 8, borderRadius: 8, background: color.bar }), ev.who),
-                text)
-            : h('div', { flex: 1 }, text));
+        timeCol && h('div', { width: even ? 52 : 46, flexShrink: 0, fontSize: even ? 16 : digit ? 14 : 12.5, fontWeight: 700, color: digit ? C.sub : C.faint }, ev.time === '시간미정' ? '미정' : ev.time || ' '),
+        h('div', { flex: 1, alignItems: 'baseline', flexWrap: 'wrap', columnGap: 8 },
+            ev.who && h('div', { fontSize: 16, fontWeight: 700, color: C.sub }, ev.who),
+            h('div', { fontSize: 16, fontWeight: 700, lineHeight: 1.4, wordBreak: 'keep-all' }, ev.text)));
 };
 
 // 주간 일정. format: 'png'(뱃지) 또는 'svg'(편집 화면 미리보기: 그림으로 바꾸지 않아 훨씬 빠르다)
@@ -300,14 +307,14 @@ export async function renderSchedule({ name, soopId, theme, days, today, footer,
 }
 
 // 오늘의 일정: 일정 목록 + 휴방 멤버(사진·이름, 없으면 '없음')
-export async function renderToday({ name, soopId, logo, theme, date, events, offAir = [], footer, format = 'png' }) {
+export async function renderToday({ name, soopId, logo, square, theme, date, events, offAir = [], format = 'png' }) {
     const [who, ...avatars] = await Promise.all([
         profile({ soopId, logo, theme }),
         ...offAir.map(m => profileBuf(m.soopId).then(buf => thumbOf(`profile|${m.soopId}`, buf, 48))),
     ]);
-    const head = scheduleHead(who, { name, subtitle: '오늘의 일정', range: `${mmdd(date)} (${weekdayOf(date)})`, square: !!logo });
+    const head = scheduleHead(who, { name, subtitle: '오늘의 일정', range: `${mmdd(date)} (${weekdayOf(date)})`, square });
     const list = events.length
-        ? events.map(ev => eventLine(ev, events.some(e => e.time)))
+        ? events.map(ev => eventLine(ev, events.some(e => e.time), true))
         : [h('div', { fontSize: 15, color: C.none }, '오늘 등록된 일정이 없습니다')];
     const offRow = h('div', { alignItems: 'center', gap: 12, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.tint}` },
         h('div', { alignItems: 'center', gap: 6, flexShrink: 0, fontSize: 13.5, fontWeight: 700, color: C.sub, background: C.tint, borderRadius: 999, padding: '5px 12px 5px 10px' }, img(MOON, 13, 13), '휴방'),
@@ -316,18 +323,16 @@ export async function renderToday({ name, soopId, logo, theme, date, events, off
                 offAir.map((m, i) => h('div', { alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 700, color: C.body },
                     avatars[i] ? img(avatars[i], 24, 24, { borderRadius: 24 }) : h('div', { width: 24, height: 24, borderRadius: 24, background: C.tint }), m.name)))
             : h('div', { fontSize: 14, color: C.none }, '없음'));
-    return out(format, card(head,
-        h('div', { flexDirection: 'column', gap: 10, padding: '20px 26px 20px' }, list, offRow),
-        footer && h('div', { justifyContent: 'center', padding: '0 0 20px' }, button(footer, true))));
+    return out(format, card(head, h('div', { flexDirection: 'column', gap: 10, padding: '20px 26px 22px' }, list, offRow)));
 }
 
 // 이번 달 달력(일요일부터). 칸마다 일정 칩: 색 막대 + 시간·누가 + 내용. 너무 많으면 +N.
 const CAL_W = 780;
 const CAL_MAX = 6;
-export async function renderCalendar({ name, soopId, logo, theme, weeks, events, holidays = [], today, footer, format = 'png' }) {
+export async function renderCalendar({ name, soopId, logo, square, theme, weeks, events, holidays = [], today, footer, format = 'png' }) {
     const who = await profile({ soopId, logo, theme });
     const month = weeks.flat().find(d => d.inMonth).date;
-    const head = scheduleHead(who, { name, subtitle: '이번 달 일정', range: `${month.slice(0, 4)}년 ${Number(month.slice(5, 7))}월`, square: !!logo });
+    const head = scheduleHead(who, { name, subtitle: '이번 달 일정', range: `${month.slice(0, 4)}년 ${Number(month.slice(5, 7))}월`, square });
     const off = new Set(holidays);
     const colW = (CAL_W - 28) / 7;
     const wdRow = h('div', { padding: '12px 14px 4px' },
