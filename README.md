@@ -23,9 +23,10 @@
 - **편집 화면**(`/edit/`, `src/edit.html`): 읽기·저장은 `api/save.js`(비밀번호 확인 후 Supabase에 저장, 바로 반영),
   미리보기는 `api/preview.js`(실제 뱃지와 같은 그림을 SVG로, 그림 변환을 건너뛰어 빠름).
 - **일정·쿠키**는 스타유니브 Supabase의 `badge_files` 표(`supabase/badges.sql`)에 둡니다. 쿠키는 암호문.
-  저장하면 재배포 없이 바로 반영되고(일정 뱃지 고정 주소는 20초 캐시), Supabase가 안 되거나 표가 비어 있으면
-  저장소의 `schedule.txt`·`cookie.enc`를 대신 읽습니다.
-- `src/lib.mjs`는 글 목록·일정 처리(서버와 편집 화면이 같이 씀), `src/live.mjs`는 SOOP 읽기·쿠키.
+  저장하면 재배포 없이 바로 반영됩니다(일정 뱃지 고정 주소는 20초 캐시). 표가 비어 있으면 저장소의
+  `schedule.txt`·`cookie.enc`를 시작값으로 읽고, Supabase가 잠깐 안 되면 직전에 읽은 값을 씁니다.
+- `src/lib.mjs` 글 목록·일정 처리(서버와 편집 화면이 같이 씀) · `src/live.mjs` SOOP 읽기·쿠키 ·
+  `src/store.mjs` Supabase 저장소 · `src/render.mjs` 그림 · `src/http.mjs`·`src/config.mjs` 공용.
 
 ### Supabase(처음 한 번)
 
@@ -39,7 +40,6 @@
 | `EDIT_PASSWORD` | 편집 화면 비밀번호(4자 이상) |
 | `BADGE_WRITE_SECRET` | Supabase Vault `badge_write_secret`과 같은 값(저장 권한) |
 | `COOKIE_KEY` | 쿠키 암호화 열쇠(16자 이상, 바꾸면 편집 화면에서 쿠키를 다시 저장) |
-| `SOOP_COOKIE` | (선택, 예비) `cookie.enc`가 없을 때 쓰는 쿠키 |
 
 ### Vercel 연결(처음 한 번)
 
@@ -59,7 +59,7 @@
   쿠키 얻기: PC 크롬에서 로그인한 채로 소주양 게시판 → F12 → Network → 새로고침 → `board` 요청 → Request Headers의 **cookie** 값 전체.
 - 편집 화면 맨 위에 쿠키 상태가 나오고, 만료가 의심되면(즐겨찾기 글이 하나도 안 보이면) 빨간 알림이 뜹니다.
   `/status`에서 자세히 볼 수 있습니다.
-- `cookie.enc`가 없거나 풀리지 않으면 환경 변수 `SOOP_COOKIE`를 씁니다. 쿠키가 새어 나갔다 싶으면 SOOP에서 로그아웃하면 무효가 됩니다.
+- 쿠키가 새어 나갔다 싶으면 SOOP에서 로그아웃하면 무효가 됩니다.
 
 ## 일정 적기
 

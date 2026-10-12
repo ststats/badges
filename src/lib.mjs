@@ -8,7 +8,7 @@ export const escapeHTML = s =>
     String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 // SOOP 날짜('2026-10-08 20:15:43')는 한국 시간이다
-export const soopDateMs = s => Date.parse(String(s || '').replace(' ', 'T') + '+09:00') || 0;
+const soopDateMs = s => Date.parse(String(s || '').replace(' ', 'T') + '+09:00') || 0;
 
 export const postUrl = (soopId, titleNo) =>
     `https://www.sooplive.co.kr/station/${encodeURIComponent(soopId)}/post/${encodeURIComponent(titleNo)}`;
@@ -97,11 +97,12 @@ export function weekSchedule({ events, offAir }, nowMs) {
     }));
 }
 
-const mmdd = date => `${Number(date.slice(5, 7))}.${Number(date.slice(8, 10))}`;
+export const mmdd = date => `${Number(date.slice(5, 7))}.${Number(date.slice(8, 10))}`;
+
 export const weekdayOf = date => WEEKDAYS[new Date(date + 'T00:00:00Z').getUTCDay()];
 
 // 편집 화면이 저장할 때 쓴다. 연도가 헷갈리지 않게 날짜는 늘 YYYY-MM-DD로 적는다.
-export function serializeSchedule({ events, offAir }, header = '') {
+export function serializeSchedule({ events, offAir }) {
     const lines = [
         ...[...offAir].map(date => ({ date, order: -1, line: `${date} 휴방` })),
         ...events.map((ev, i) => ({
@@ -111,7 +112,7 @@ export function serializeSchedule({ events, offAir }, header = '') {
             line: [ev.date, ev.time, String(ev.text).replace(/\s+/g, ' ').trim()].filter(Boolean).join(' '),
         })),
     ].sort((a, b) => a.date.localeCompare(b.date) || (a.order < 0 ? -1 : b.order < 0 ? 1 : timeKey(a.time).localeCompare(timeKey(b.time)) || a.order - b.order));
-    let out = header.trimEnd() ? header.trimEnd() + '\n\n' : '';
+    let out = '';
     let last = '';
     for (const l of lines) {
         if (last && l.date.slice(0, 10) !== last) out += '\n';

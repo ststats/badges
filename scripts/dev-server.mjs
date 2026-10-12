@@ -2,14 +2,13 @@
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { root } from '../src/config.mjs';
 import img from '../api/img.js';
 import go from '../api/go.js';
 import status from '../api/status.js';
 import save from '../api/save.js';
 import preview from '../api/preview.js';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const vercel = JSON.parse(await fs.readFile(path.join(root, 'vercel.json'), 'utf-8'));
 const handlers = { '/api/img': img, '/api/go': go, '/api/status': status, '/api/save': save, '/api/preview': preview };
 const toRegex = src =>

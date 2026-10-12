@@ -1,12 +1,10 @@
 // Vercel 정적 파일(public/): 편집 화면과 붙여 넣을 코드 모음. 뱃지 그림은 api/img.js가 그때그때 그린다.
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { config, root } from '../src/config.mjs';
+import { escapeHTML as esc } from '../src/lib.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const out = path.join(root, 'public');
-const config = JSON.parse(await fs.readFile(path.join(root, 'config.json'), 'utf-8'));
-const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 await fs.rm(out, { recursive: true, force: true });
 await fs.mkdir(path.join(out, 'edit'), { recursive: true });

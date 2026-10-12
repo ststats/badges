@@ -106,7 +106,7 @@ details textarea { width: 100%; min-height: 84px; border: 1px solid var(--line);
   </aside>
 </main>
 <script type="module">
-import { kstToday, parseSchedule, serializeSchedule, shiftWeek, weekSchedule } from '../lib.mjs';
+import { kstToday, mmdd, parseSchedule, serializeSchedule, shiftWeek, weekdayOf, weekSchedule } from '../lib.mjs';
 
 // 읽기·저장은 서버(/api/save)가 하고, 저장은 편집 비밀번호를 확인한다. 미리보기도 서버가 실제 뱃지처럼 그린다.
 const PW_KEY = 'badges-edit-password';
@@ -115,17 +115,18 @@ const config = await fetch('../config.json', { cache: 'no-store' }).then(r => r.
 document.title = `${config.name} 일정 편집`;
 $('title').textContent = `${config.name} 일정 편집`;
 
-const store = {
+// 편집 비밀번호는 이 브라우저에만 기억한다
+const savedPw = {
     get: () => { try { return localStorage.getItem(PW_KEY) || ''; } catch { return ''; } },
     set: v => { try { v ? localStorage.setItem(PW_KEY, v) : localStorage.removeItem(PW_KEY); } catch {} },
 };
 const pwMsg = (text, cls = '') => { $('pwMsg').textContent = text; $('pwMsg').className = `cookie-msg ${cls}`; };
-$('pw').value = store.get();
-if (!store.get()) $('pwBox').open = true;
-$('pw').addEventListener('change', () => { store.set($('pw').value); refreshButtons(); });
-$('forget').addEventListener('click', () => { store.set(''); $('pw').value = ''; pwMsg(''); refreshButtons(); });
+$('pw').value = savedPw.get();
+if (!savedPw.get()) $('pwBox').open = true;
+$('pw').addEventListener('change', () => { savedPw.set($('pw').value); refreshButtons(); });
+$('forget').addEventListener('click', () => { savedPw.set(''); $('pw').value = ''; pwMsg(''); refreshButtons(); });
 $('pwCheck').addEventListener('click', async () => {
-    store.set($('pw').value);
+    savedPw.set($('pw').value);
     refreshButtons();
     try {
         await post({ file: 'check' });
@@ -137,13 +138,13 @@ $('pwCheck').addEventListener('click', async () => {
 
 // 서버에 보내고 오류면 그 문구로 던진다
 async function post(body) {
-    const res = await fetch('../api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: store.get(), ...body }) });
+    const res = await fetch('../api/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: savedPw.get(), ...body }) });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || `서버 ${res.status}`);
     return data;
 }
 
-let state = { events: [], offAir: new Set(), header: '', version: null };
+let state = { events: [], offAir: new Set(), version: null };
 let weekOffset = 0;
 let dirty = false;
 let loading = false;
@@ -155,18 +156,11 @@ async function load() {
     refreshButtons();
     status('불러오는 중…');
     try {
-        const res = await fetch(`../api/save?t=${Date.now()}`, { cache: 'no-store' });
+        const res = await fetch('../api/save', { cache: 'no-store' });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || `서버 ${res.status}`);
-        const text = data.content || '';
-        const parsed = parseSchedule(text, Date.now());
-        // 맨 위 설명(# 줄)은 그대로 두고 일정만 고쳐 쓴다
-        const header = [];
-        for (const line of text.split(/\r?\n/)) {
-            if (line.trim() === '' || line.trim().startsWith('#')) header.push(line);
-            else break;
-        }
-        state = { events: parsed.events, offAir: parsed.offAir, header: header.join('\n'), version: data.version };
+        const parsed = parseSchedule(data.content || '', Date.now());
+        state = { events: parsed.events, offAir: parsed.offAir, version: data.version };
         dirty = false;
         status(parsed.errors.length ? `불러옴. 읽지 못한 줄 ${parsed.errors.length}개는 저장하면 사라집니다: ${parsed.errors.join(' / ')}` : '불러왔습니다', parsed.errors.length ? 'err' : '');
     } catch (e) {
@@ -190,20 +184,18 @@ const normTime = raw => {
 const showTime = t => (t === '시간미정' ? '미정' : t);
 
 const currentNow = () => shiftWeek(Date.now(), weekOffset);
-const fmt = d => `${Number(d.slice(5, 7))}.${Number(d.slice(8, 10))}`;
-const WD = ['일', '월', '화', '수', '목', '금', '토'];
 
 function render() {
     const days = weekSchedule(state, currentNow());
-    $('range').textContent = `${weekOffset === 0 ? '이번 주' : weekOffset === 1 ? '다음 주' : weekOffset === -1 ? '지난 주' : `${weekOffset > 0 ? '+' : ''}${weekOffset}주`} · ${fmt(days[0].date)} – ${fmt(days[6].date)}`;
+    $('range').textContent = `${weekOffset === 0 ? '이번 주' : weekOffset === 1 ? '다음 주' : weekOffset === -1 ? '지난 주' : `${weekOffset > 0 ? '+' : ''}${weekOffset}주`} · ${mmdd(days[0].date)} – ${mmdd(days[6].date)}`;
     const today = kstToday(Date.now());
     const box = $('days');
     box.replaceChildren(
         ...days.map(day => {
-            const wd = WD[new Date(day.date + 'T00:00:00Z').getUTCDay()];
+            const wd = weekdayOf(day.date);
             const el = document.createElement('div');
             el.className = ['day', day.date === today && 'today', day.offAir && 'off', wd === '일' && 'sun', wd === '토' && 'sat'].filter(Boolean).join(' ');
-            el.innerHTML = `<div class="dh"><span class="d">${wd}<small>${fmt(day.date)}${day.date === today ? ' · 오늘' : ''}</small></span>
+            el.innerHTML = `<div class="dh"><span class="d">${wd}<small>${mmdd(day.date)}${day.date === today ? ' · 오늘' : ''}</small></span>
               <label class="toggle"><input type="checkbox"${day.offAir ? ' checked' : ''}> 휴방</label></div>`;
             el.querySelector('.toggle input').addEventListener('change', e => {
                 e.target.checked ? state.offAir.add(day.date) : state.offAir.delete(day.date);
@@ -297,15 +289,15 @@ async function preview() {
 
 function refreshButtons() {
     const bad = state.events.some(e => e.bad);
-    $('save').disabled = loading || !dirty || bad || !store.get();
-    $('save').title = !store.get() ? '아래 "편집 비밀번호"를 먼저 넣어 주세요' : bad ? '빨간 시간 칸을 고쳐 주세요' : '';
+    $('save').disabled = loading || !dirty || bad || !savedPw.get();
+    $('save').title = !savedPw.get() ? '아래 "편집 비밀번호"를 먼저 넣어 주세요' : bad ? '빨간 시간 칸을 고쳐 주세요' : '';
 }
 
 $('save').addEventListener('click', async () => {
     $('save').disabled = true;
     status('저장 중…');
     try {
-        const text = serializeSchedule(cleanState(), state.header);
+        const text = serializeSchedule(cleanState());
         const data = await post({ file: 'schedule', content: text, version: state.version });
         state.version = data.version;
         state.events = cleanState().events;
@@ -353,7 +345,7 @@ fetch('../status.json', { cache: 'no-store' })
 
 $('cookieSave').addEventListener('click', async () => {
     const msg = (text, cls = '') => { $('cookieMsg').textContent = text; $('cookieMsg').className = `cookie-msg ${cls}`; };
-    if (!store.get()) return msg('위 "편집 비밀번호"를 먼저 넣어 주세요.', 'err');
+    if (!savedPw.get()) return msg('위 "편집 비밀번호"를 먼저 넣어 주세요.', 'err');
     const cookie = $('cookieInput').value.trim();
     if (!cookie) return msg('쿠키를 붙여 넣어 주세요.', 'err');
     $('cookieSave').disabled = true;

@@ -1,14 +1,11 @@
-// 서버(Vercel 함수)에서 뱃지를 PNG로 그린다. satori(요소 → SVG) + resvg(SVG → PNG).
-// 모양은 src/lib.mjs의 HTML 뱃지(크롬으로 찍던 것)와 같게 맞춘다.
+// 뱃지 그림: satori(요소 → SVG) + resvg(SVG → PNG). 편집 화면 미리보기는 SVG 그대로 쓴다.
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import satori from 'satori';
 import sharp from 'sharp';
 import { Resvg } from '@resvg/resvg-js';
-import { formatPostDate, postText, weekdayOf } from './lib.mjs';
-
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+import { root } from './config.mjs';
+import { formatPostDate, mmdd, postText, weekdayOf } from './lib.mjs';
 
 let fontsPromise = null;
 const loadFonts = () =>
@@ -35,48 +32,59 @@ const ARROW = color =>
     svgUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="none" stroke="${color}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6h7M6.5 3l3 3-3 3"/></svg>`);
 const MOON = svgUri(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="${C.sub}"><path d="M13.5 10.2A6 6 0 0 1 5.8 2.5a6 6 0 1 0 7.7 7.7Z"/></svg>`);
 
-// 외부 그림은 미리 받아 data URI로 넣는다. 못 받으면 null(그 자리를 빼고 그린다).
-// SOOP 프로필은 jpg 주소인데 움직이는 GIF라서, sharp로 첫 장면을 작은 PNG로 바꾼다(큰 사진도 줄여 빨라진다).
-const imageCache = new Map();
-async function fetchImage(url, size, timeoutMs = 6000) {
-    if (!url) return null;
-    const key = `${size}|${url}`;
-    if (imageCache.has(key)) return imageCache.get(key);
-    const p = (async () => {
-        try {
-            const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
-            if (!res.ok) return null;
-            const buf = Buffer.from(await res.arrayBuffer());
-            if (url.endsWith('.svg')) return `data:image/svg+xml;base64,${buf.toString('base64')}`;
-            const out = await sharp(buf, { animated: false }).rotate().resize(size, size, { fit: 'cover' }).png().toBuffer();
-            return `data:image/png;base64,${out.toString('base64')}`;
-        } catch {
-            return null;
-        }
-    })();
-    imageCache.set(key, p);
-    // 실패는 다음 요청에서 다시 시도하고, 캐시가 무한히 커지지 않게 한다
-    p.then(v => { if (!v) imageCache.delete(key); });
-    if (imageCache.size > 200) imageCache.delete(imageCache.keys().next().value);
-    return p;
+// 외부 그림은 받아서 data URI로 넣는다. 받은 원본은 주소별로 기억해 같은 그림을 두 번 받지 않는다.
+// 못 받으면 null(그 자리를 빼고 그린다). 실패는 다음 요청에서 다시 시도한다.
+function remember(cache, key, make) {
+    if (!cache.has(key)) {
+        const p = make().catch(() => null);
+        cache.set(key, p);
+        p.then(v => { if (!v) cache.delete(key); });
+        if (cache.size > 200) cache.delete(cache.keys().next().value);
+    }
+    return cache.get(key);
 }
+const downloads = new Map();
+const download = (url, timeoutMs = 6000) =>
+    remember(downloads, url, async () => {
+        const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+        return res.ok ? Buffer.from(await res.arrayBuffer()) : null;
+    });
+const dataUri = (type, buf) => `data:${type};base64,${buf.toString('base64')}`;
+
+// 사진: 정사각형으로 잘라 줄인 PNG. SOOP 프로필은 jpg 주소인데 움직이는 GIF라 첫 장면만 쓴다.
+const thumbs = new Map();
+const thumb = (url, size) =>
+    remember(thumbs, `${size}|${url}`, async () => {
+        const buf = await download(url);
+        return buf && dataUri('image/png', await sharp(buf, { animated: false }).rotate().resize(size, size, { fit: 'cover' }).png().toBuffer());
+    });
+
+// 머리 배경: 프로필 사진의 색만 쓴다. 4×2칸 평균 색으로 줄였다가 늘려 흐리면 얼굴 모양 없이 그 분위기만 남는다.
+const banners = new Map();
+const banner = url =>
+    remember(banners, url, async () => {
+        const buf = await download(url);
+        if (!buf) return null;
+        const grid = await sharp(buf, { animated: false }).resize(4, 2, { fit: 'cover' }).modulate({ saturation: 1.3, brightness: 1.05 }).removeAlpha().raw().toBuffer();
+        const out = await sharp(grid, { raw: { width: 4, height: 2, channels: 3 } }).resize(CARD_W, 160, { kernel: 'cubic' }).blur(28).jpeg({ quality: 88 }).toBuffer();
+        return dataUri('image/jpeg', out);
+    });
 
 // 이모지는 Twemoji 그림으로 그린다(Pretendard에 없음)
-const emojiCache = new Map();
-function toCodePoints(segment) {
-    const cps = [...segment].map(c => c.codePointAt(0).toString(16));
-    return (segment.includes('‍') ? cps : cps.filter(c => c !== 'fe0f')).join('-');
-}
+const emojis = new Map();
 async function loadAdditionalAsset(code, segment) {
     if (code !== 'emoji') return [];
-    const key = toCodePoints(segment);
-    if (!emojiCache.has(key))
-        emojiCache.set(key, fetchImage(`https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/${key}.svg`, 0, 4000));
-    return (await emojiCache.get(key)) || '';
+    const cps = [...segment].map(c => c.codePointAt(0).toString(16));
+    const key = (segment.includes('\u200d') ? cps : cps.filter(c => c !== 'fe0f')).join('-');
+    return remember(emojis, key, async () => {
+        const buf = await download(`https://cdn.jsdelivr.net/gh/jdecked/twemoji@15.1.0/assets/svg/${key}.svg`, 4000);
+        return buf && dataUri('image/svg+xml', buf);
+    }).then(v => v || '');
 }
 
-export const avatarUrl = (soopId, post) =>
+const avatarUrl = (soopId, post) =>
     post?.profileImage || `https://profile.img.sooplive.com/LOGO/${soopId.slice(0, 2)}/${soopId}/${soopId}.jpg`;
+const profile = url => Promise.all([thumb(url, 160), banner(url)]);
 
 const CARD_W = 600;
 const card = (...children) =>
@@ -93,42 +101,13 @@ const card = (...children) =>
         )
     );
 
-// 머리: 프로필 사진을 흐리게 깔고 어둡게 덮는다. 글자 쪽은 position:relative여야 흐림이 번지지 않는다.
-// 머리 배경: 프로필 사진의 색만 쓴다. 4×2칸으로 줄여 평균 색을 얻고, 그대로 늘려 흐리면
-// 얼굴·머리 모양 없이 그 사진 분위기의 부드러운 그라데이션이 된다.
-const bannerCache = new Map();
-export function colorBanner(url) {
-    if (!url) return Promise.resolve(null);
-    if (!bannerCache.has(url))
-        bannerCache.set(url, (async () => {
-            try {
-                const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
-                if (!res.ok) return null;
-                const grid = await sharp(Buffer.from(await res.arrayBuffer()), { animated: false })
-                    .resize(4, 2, { fit: 'cover', position: 'centre' })
-                    .modulate({ saturation: 1.3, brightness: 1.05 })
-                    .removeAlpha()
-                    .raw()
-                    .toBuffer();
-                const out = await sharp(grid, { raw: { width: 4, height: 2, channels: 3 } })
-                    .resize(CARD_W, 160, { kernel: 'cubic' })
-                    .blur(28)
-                    .jpeg({ quality: 88 })
-                    .toBuffer();
-                return `data:image/jpeg;base64,${out.toString('base64')}`;
-            } catch {
-                return null;
-            }
-        })().then(v => { if (!v) bannerCache.delete(url); return v; }));
-    return bannerCache.get(url);
-}
-
-const hero = (banner, content) =>
+// 머리: 프로필 색 배경 위에 살짝 어두운 막을 덮는다. 글자 쪽은 position:relative여야 배경 위에 그려진다.
+const hero = (bg, content) =>
     h(
         'div',
         { position: 'relative', overflow: 'hidden', color: '#fff' },
-        banner && img(banner, CARD_W, 160, { position: 'absolute', left: 0, top: '50%', marginTop: -80, objectFit: 'cover' }),
-        h('div', { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundImage: banner ? 'linear-gradient(180deg, rgba(20,20,24,0.04), rgba(20,20,24,0.3))' : 'linear-gradient(135deg, #3f3f46, #18181b)' }),
+        bg && img(bg, CARD_W, 160, { position: 'absolute', left: 0, top: '50%', marginTop: -80, objectFit: 'cover' }),
+        h('div', { position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundImage: bg ? 'linear-gradient(180deg, rgba(20,20,24,0.04), rgba(20,20,24,0.3))' : 'linear-gradient(135deg, #3f3f46, #18181b)' }),
         h('div', { position: 'relative', flex: 1 }, content)
     );
 
@@ -159,19 +138,19 @@ function paragraphs(text, { lines, fontSize, lineHeight, color, marginTop, width
         estimate > lines && h('div', { position: 'absolute', left: 0, right: 0, top: lh * (lines - 1), height: lh, backgroundImage: 'linear-gradient(90deg, rgba(255,255,255,0) 40%, #fff 100%)' }));
 }
 
-export async function renderNotice({ name, soopId, post, lines = 3 }) {
+// lines가 3보다 크면 최신 글(본문을 길게, 사진을 아래에 크게), 아니면 사진 한 장을 오른쪽에 작게
+export async function renderNotice({ name, soopId, post, lines = 3, format = 'png' }) {
     const featured = Number(lines) > 3;
     const photosAll = (post?.photos || []).map(p => p?.url).filter(Boolean);
-    const [avatar, banner, ...photos] = await Promise.all([
-        fetchImage(avatarUrl(soopId, post), 160),
-        colorBanner(avatarUrl(soopId, post)),
-        ...photosAll.slice(0, featured ? 4 : 1).map(u => fetchImage(u, 264)),
+    const [[avatar, bg], ...photos] = await Promise.all([
+        profile(avatarUrl(soopId, post)),
+        ...photosAll.slice(0, featured ? 4 : 1).map(u => thumb(u, 264)),
     ]);
     const shown = photos.filter(Boolean);
     const extra = photosAll.length - shown.length;
 
     const head = hero(
-        banner,
+        bg,
         h(
             'div',
             { flex: 1, alignItems: 'center', gap: 12, padding: featured ? '16px 22px' : '12px 20px' },
@@ -182,7 +161,7 @@ export async function renderNotice({ name, soopId, post, lines = 3 }) {
             featured && h('div', { fontSize: 11.5, fontWeight: 800, letterSpacing: '0.04em', color: C.ink, background: 'rgba(255,255,255,0.92)', borderRadius: 999, padding: '5px 11px' }, 'NEW')
         )
     );
-    if (!post) return png(card(head, h('div', { padding: '20px 24px 22px', fontSize: 15, color: C.faint }, '아직 글이 없습니다')));
+    if (!post) return out(format, card(head, h('div', { padding: '20px 24px 22px', fontSize: 15, color: C.faint }, '아직 글이 없습니다')));
 
     const raw = postText(post);
     const text = featured ? raw : raw.replace(/\n{2,}/g, '\n');
@@ -193,27 +172,25 @@ export async function renderNotice({ name, soopId, post, lines = 3 }) {
 
     if (featured) {
         const size = (CARD_W - 48 - 8 * 3) / 4;
-        return png(card(head, h('div', { flexDirection: 'column', padding: '20px 24px 22px' },
+        return out(format, card(head, h('div', { flexDirection: 'column', padding: '20px 24px 22px' },
             title, body,
             shown.length > 0 && h('div', { gap: 8, marginTop: 16 },
                 shown.map((src, i) => h('div', { position: 'relative', width: size, height: size, borderRadius: 14, overflow: 'hidden', background: C.tint },
                     img(src, size, size, { objectFit: 'cover' }), i === shown.length - 1 && more(extra)))),
             h('div', { justifyContent: 'flex-end', marginTop: 18 }, button('원글 보기', true)))));
     }
-    return png(card(head, h('div', { alignItems: 'center', gap: 16, padding: '16px 20px 18px' },
+    return out(format, card(head, h('div', { alignItems: 'center', gap: 16, padding: '16px 20px 18px' },
         h('div', { flex: 1, flexDirection: 'column' }, title, body, h('div', { marginTop: 12 }, button('원글 보기', false))),
         shown[0] && h('div', { position: 'relative', width: 100, height: 100, borderRadius: 16, overflow: 'hidden', background: C.tint },
             img(shown[0], 100, 100, { objectFit: 'cover' }),
             extra > 0 && h('div', { position: 'absolute', right: 6, bottom: 6, fontSize: 12.5, fontWeight: 800, color: '#fff', background: 'rgba(24,24,27,0.65)', borderRadius: 999, padding: '3px 8px' }, `+${extra}`)))));
 }
 
-const mmdd = date => `${Number(date.slice(5, 7))}.${Number(date.slice(8, 10))}`;
-
 // format: 'png'(뱃지) 또는 'svg'(편집 화면 미리보기: 그림으로 바꾸지 않아 훨씬 빠르다)
 export async function renderSchedule({ name, soopId, days, today, footer, format = 'png' }) {
-    const [avatar, banner] = await Promise.all([fetchImage(avatarUrl(soopId), 160), colorBanner(avatarUrl(soopId))]);
+    const [avatar, bg] = await profile(avatarUrl(soopId));
     const head = hero(
-        banner,
+        bg,
         h('div', { flex: 1, alignItems: 'center', gap: 14, padding: '24px 26px 22px' },
             avatarImg(avatar, 52),
             h('div', { flex: 1, flexDirection: 'column' },
@@ -231,8 +208,9 @@ export async function renderSchedule({ name, soopId, days, today, footer, format
             h('div', { fontSize: 18, fontWeight: 800, lineHeight: 1.1, color: isToday ? '#fff' : C.ink }, String(Number(date.slice(8, 10)))));
         const items = [
             offAir && h('div', { alignSelf: 'flex-start', alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 700, color: C.sub, background: isToday ? '#fff' : C.tint, borderRadius: 999, padding: '5px 12px 5px 10px' }, img(MOON, 13, 13), '휴방'),
+            // 그날 시간이 있는 일정이 하나라도 있으면 시간 칸을 비워서라도 맞춘다
             ...events.map(ev => h('div', { alignItems: 'baseline', gap: 12 },
-                ev.time && h('div', { width: 46, flexShrink: 0, fontSize: /^\d/.test(ev.time) ? 14 : 12.5, fontWeight: 700, color: /^\d/.test(ev.time) ? C.sub : C.faint }, ev.time === '시간미정' ? '미정' : ev.time),
+                (ev.time || events.some(e => e.time)) && h('div', { width: 46, flexShrink: 0, fontSize: /^\d/.test(ev.time) ? 14 : 12.5, fontWeight: 700, color: /^\d/.test(ev.time) ? C.sub : C.faint }, ev.time === '시간미정' ? '미정' : ev.time || ' '),
                 h('div', { flex: 1, fontSize: 16, fontWeight: 700, lineHeight: 1.4, wordBreak: 'keep-all' }, ev.text))),
             !offAir && !events.length && h('div', { fontSize: 14, color: C.none }, '일정 없음'),
         ].filter(Boolean);

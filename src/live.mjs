@@ -1,40 +1,12 @@
-// Vercel 함수가 쓰는 데이터: SOOP 게시판(30초 기억)과 배포에 같이 들어간 schedule.txt
+// SOOP 게시판 읽기와 로그인 쿠키(즐겨찾기 전용 글용), 일정 읽기
 import crypto from 'node:crypto';
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { config } from './config.mjs';
 import { boardApiUrl, recentOwnPosts } from './lib.mjs';
 import { getFile } from './store.mjs';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const config = JSON.parse(await fs.readFile(path.join(root, 'config.json'), 'utf-8'));
-
-// 게시판 첫 쪽. Vercel 환경 변수 SOOP_COOKIE(본인 로그인 쿠키)가 있으면 붙여서
-// 즐겨찾기 전용 글까지 받는다(사용자 요청: 본인만 쓰는 주소라 공개판에 넣음). 같은 API가 .com과 .co.kr 두 주소에 있어 하나가 안 되면 다른 쪽을 쓴다.
-async function fetchBoard(cookie) {
-    try {
-        return await fetchBoardFrom('api-channel.sooplive.com', cookie);
-    } catch (e) {
-        if (!cookie) throw e;
-        return fetchBoardFrom('api-channel.sooplive.co.kr', cookie);
-    }
-}
-
-async function fetchBoardFrom(host, cookie) {
-    const url = boardApiUrl(config.soopId, host);
-    const headers = cookie
-        ? { Cookie: cookie, Referer: `https://www.sooplive.co.kr/station/${config.soopId}/board`, 'User-Agent': 'Mozilla/5.0' }
-        : {};
-    const res = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
-    if (!res.ok) throw new Error(`SOOP 게시판 HTTP ${res.status}`);
-    const board = await res.json();
-    if (!Array.isArray(board?.contents)) throw new Error('SOOP 게시판 응답 형식이 바뀌었습니다');
-    return recentOwnPosts(board, config.soopId, 20);
-}
-
-// 쿠키는 편집 화면이 커밋한 cookie.enc(COOKIE_KEY로 암호화)를 먼저 쓰고, 없으면 환경 변수 SOOP_COOKIE.
-// 저장소는 공개라 암호문만 두고, 열쇠(COOKIE_KEY)는 Vercel 환경 변수에만 있다.
+// ----- 쿠키: 편집 화면에서 저장한 암호문(badge_files의 cookie)을 COOKIE_KEY로 푼다 -----
 const cookieCipherKey = () => crypto.createHash('sha256').update(process.env.COOKIE_KEY || '').digest();
+export const cookieKeyReady = () => (process.env.COOKIE_KEY || '').length >= 16;
 
 export function encryptCookie(cookie) {
     const iv = crypto.randomBytes(12);
@@ -50,82 +22,101 @@ export function decryptCookie(text) {
     return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]).toString('utf8');
 }
 
-export const cookieKeyReady = () => (process.env.COOKIE_KEY || '').length >= 16;
-
-// 쿠키 찾는 순서: Supabase(편집 화면에서 저장, 바로 반영) → 저장소의 cookie.enc(예전 방식) → 환경 변수 SOOP_COOKIE
 async function currentCookie() {
-    if (cookieKeyReady()) {
-        const stored = await getFile('cookie');
-        try {
-            if (stored?.content) return { cookie: decryptCookie(stored.content), source: 'store' };
-            return { cookie: decryptCookie(await fs.readFile(path.join(root, 'cookie.enc'), 'utf-8')), source: 'file' };
-        } catch (e) {
-            if (e.code !== 'ENOENT') console.error('쿠키 암호문을 풀지 못했습니다(COOKIE_KEY가 바뀌었나요?):', e.message);
-        }
+    if (!cookieKeyReady()) return '';
+    const stored = (await getFile('cookie'))?.content;
+    if (!stored) return '';
+    try {
+        return decryptCookie(stored);
+    } catch (e) {
+        console.error('쿠키 암호문을 풀지 못했습니다(COOKIE_KEY가 바뀌었나요?):', e.message);
+        return '';
     }
-    return { cookie: process.env.SOOP_COOKIE || '', source: process.env.SOOP_COOKIE ? 'env' : 'none' };
 }
 
-// 편집 화면이 새 쿠키를 저장하기 전에 SOOP이 받아 주는지 본다. 공개 목록에 없는 글 수를 돌려준다.
-export async function checkCookie(cookie) {
-    const [mine, pub] = await Promise.all([fetchBoard(cookie), fetchBoard('')]);
-    const pubIds = new Set(pub.map(p => p.titleNo));
-    return mine.filter(p => !pubIds.has(p.titleNo)).length;
+// ----- 게시판 -----
+// 같은 API가 .com과 .co.kr 두 주소에 있어, 쿠키로 읽다가 하나가 안 되면 다른 쪽을 쓴다
+async function fetchBoard(cookie) {
+    const get = async host => {
+        const headers = cookie
+            ? { Cookie: cookie, Referer: `https://www.sooplive.co.kr/station/${config.soopId}/board`, 'User-Agent': 'Mozilla/5.0' }
+            : {};
+        const res = await fetch(boardApiUrl(config.soopId, host), { headers, signal: AbortSignal.timeout(8000) });
+        if (!res.ok) throw new Error(`SOOP 게시판 HTTP ${res.status}`);
+        const board = await res.json();
+        if (!Array.isArray(board?.contents)) throw new Error('SOOP 게시판 응답 형식이 바뀌었습니다');
+        return recentOwnPosts(board, config.soopId, 20);
+    };
+    try {
+        return await get('api-channel.sooplive.com');
+    } catch (e) {
+        if (!cookie) throw e;
+        return get('api-channel.sooplive.co.kr');
+    }
 }
 
+// 공개 목록(public)과 쿠키로 본 목록(mine)을 각각 30초 기억한다.
+// SOOP이 잠깐 안 되면 직전에 받은 목록을 6시간까지 대신 쓴다(커뮤니티에 깨진 이미지가 뜨지 않게).
+const CACHE_MS = 30000;
+const FALLBACK_MS = 6 * 3600 * 1000;
+const boards = { public: {}, mine: {} };
 let lastCookieError = '';
-let boardCache = { at: 0, request: null };
-let lastGoodBoard = null;
-async function cachedBoard() {
-    if (boardCache.request && Date.now() - boardCache.at < 30000) return boardCache.request;
-    const { cookie } = await currentCookie();
-    if (boardCache.request && Date.now() - boardCache.at < 30000) return boardCache.request;
-    const request = cookie
-        ? fetchBoard(cookie).then(
-              posts => ((lastCookieError = ''), posts),
-              e => {
-                  // 잘못되거나 만료된 쿠키면 SOOP이 500을 준다. 그때는 공개 글로 대신한다.
-                  lastCookieError = e.message;
-                  console.error('쿠키로 게시판 읽기 실패:', e.message);
-                  return fetchBoard('');
-              }
-          )
-        : fetchBoard('');
-    // SOOP이 잠깐 안 되면 직전에 받은 목록을 6시간까지 대신 쓴다(커뮤니티에 깨진 이미지가 뜨지 않게)
-    const guarded = request.then(
-        posts => ((lastGoodBoard = { at: Date.now(), posts }), posts),
+
+async function loadBoard(kind) {
+    if (kind === 'public') return fetchBoard('');
+    const cookie = await currentCookie();
+    if (!cookie) return board('public');
+    try {
+        const posts = await fetchBoard(cookie);
+        lastCookieError = '';
+        return posts;
+    } catch (e) {
+        // 잘못되거나 만료된 쿠키면 SOOP이 500을 준다. 그때는 공개 글로 대신한다.
+        lastCookieError = e.message;
+        console.error('쿠키로 게시판 읽기 실패:', e.message);
+        return board('public');
+    }
+}
+
+function board(kind) {
+    const slot = boards[kind];
+    if (slot.request && Date.now() - slot.at < CACHE_MS) return slot.request;
+    const request = loadBoard(kind).then(
+        posts => ((slot.good = { at: Date.now(), posts }), posts),
         e => {
-            if (lastGoodBoard && Date.now() - lastGoodBoard.at < 6 * 3600 * 1000) {
-                console.error('SOOP 게시판 실패, 직전 목록을 씁니다:', e.message);
-                return lastGoodBoard.posts;
+            if (slot.good && Date.now() - slot.good.at < FALLBACK_MS) {
+                console.error(`SOOP 게시판 실패, 직전 목록을 씁니다: ${e.message}`);
+                return slot.good.posts;
             }
             throw e;
         }
     );
-    boardCache = { at: Date.now(), request: guarded };
-    guarded.catch(() => { if (boardCache.request === guarded) boardCache = { at: 0, request: null }; });
-    return guarded;
+    Object.assign(slot, { at: Date.now(), request });
+    request.catch(() => { if (slot.request === request) slot.request = null; });
+    return request;
 }
 
-// 새 쿠키를 저장한 뒤 바로 반영되게 30초 기억을 지운다
-export const forgetBoard = () => { boardCache = { at: 0, request: null }; };
+// 새 쿠키를 저장한 뒤 바로 반영되게 기억을 지운다
+export const forgetBoards = () => { boards.public.request = boards.mine.request = null; };
 
-export const recentPosts = () => cachedBoard().then(posts => posts.slice(0, config.noticeCount));
+export const recentPosts = () => board('mine').then(posts => posts.slice(0, config.noticeCount));
 
-// /status 화면용: 쿠키로 받은 목록에 공개 목록에 없는 글이 있으면 즐겨찾기 글까지 받고 있는 것
-export async function cookieStatus() {
-    const [mine, pub] = await Promise.all([cachedBoard(), fetchBoard('')]);
+const extraPosts = (mine, pub) => {
     const pubIds = new Set(pub.map(p => p.titleNo));
-    const { source } = await currentCookie();
-    return { hasCookie: source !== 'none', source, error: lastCookieError, extra: mine.filter(p => !pubIds.has(p.titleNo)) };
+    return mine.filter(p => !pubIds.has(p.titleNo));
+};
+
+// 편집 화면이 새 쿠키를 저장하기 전에 SOOP이 받아 주는지 본다. 공개 목록에 없는 글 수를 돌려준다.
+export async function checkCookie(cookie) {
+    const [mine, pub] = await Promise.all([fetchBoard(cookie), board('public')]);
+    return extraPosts(mine, pub).length;
 }
 
-// 일정: Supabase에 저장된 것을 먼저, 없거나 Supabase가 안 되면 저장소의 schedule.txt
-export async function scheduleFile() {
-    const stored = await getFile('schedule');
-    if (stored) return stored;
-    return { content: await fs.readFile(path.join(root, 'schedule.txt'), 'utf-8'), version: null };
+// /status: 쿠키로 받은 목록에 공개 목록에 없는 글이 있으면 즐겨찾기 글까지 받고 있는 것
+export async function cookieStatus() {
+    const [cookie, mine, pub] = await Promise.all([currentCookie(), board('mine'), board('public')]);
+    return { hasCookie: !!cookie, error: lastCookieError, extra: extraPosts(mine, pub), posts: mine.slice(0, config.noticeCount) };
 }
-export const scheduleText = async () => (await scheduleFile()).content;
 
-export const query = req => new URL(req.url, 'http://localhost').searchParams;
+// ----- 일정 -----
+export const scheduleFile = async () => (await getFile('schedule')) || { content: '', version: null };
