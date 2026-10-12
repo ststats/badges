@@ -270,14 +270,14 @@ export async function renderNotice({ name, soopId, theme, post, lines = 3, forma
             extra > 0 && h('div', { position: 'absolute', right: 6, bottom: 6, fontSize: 12.5, fontWeight: 800, color: '#fff', background: 'rgba(24,24,27,0.65)', borderRadius: 999, padding: '3px 8px' }, `+${extra}`)))));
 }
 
-// 일정 한 줄: [시간] [누가] 내용. timeCol이면 시간이 없어도 칸을 비워 둔다.
+// 일정 한 줄: [시간] [누가(일정 색 글자)] 내용. timeCol이면 시간이 없어도 칸을 비워 둔다.
 // even이면 시간·누가도 내용과 같은 크기(오늘의 일정), 아니면 시간을 조금 작게(주간 일정).
 const eventLine = (ev, timeCol, even) => {
     const digit = /^\d/.test(ev.time);
     return h('div', { alignItems: 'baseline', gap: 12 },
         timeCol && h('div', { width: even ? 52 : 46, flexShrink: 0, fontSize: even ? 16 : digit ? 14 : 12.5, fontWeight: 700, color: digit ? C.sub : C.faint }, ev.time === '시간미정' ? '미정' : ev.time || ' '),
         h('div', { flex: 1, alignItems: 'baseline', flexWrap: 'wrap', columnGap: 8 },
-            ev.who && h('div', { fontSize: 16, fontWeight: 700, color: C.sub }, ev.who),
+            ev.who && h('div', { fontSize: 16, fontWeight: 700, color: eventColor(ev.color)?.text || C.sub }, ev.who),
             h('div', { fontSize: 16, fontWeight: 700, lineHeight: 1.4, wordBreak: 'keep-all' }, ev.text)));
 };
 
@@ -306,6 +306,8 @@ export async function renderSchedule({ name, soopId, theme, days, today, footer,
         footer && h('div', { justifyContent: 'center', padding: '6px 0 20px' }, button(footer, true))));
 }
 
+const CAL_W = 780; // 캄몬스타즈 오늘의 일정·달력 가로
+
 // 오늘의 일정: 일정 목록 + 휴방 멤버(사진·이름, 없으면 '없음')
 export async function renderToday({ name, soopId, logo, square, theme, date, events, offAir = [], format = 'png' }) {
     const [who, ...avatars] = await Promise.all([
@@ -323,11 +325,11 @@ export async function renderToday({ name, soopId, logo, square, theme, date, eve
                 offAir.map((m, i) => h('div', { alignItems: 'center', gap: 6, fontSize: 14, fontWeight: 700, color: C.body },
                     avatars[i] ? img(avatars[i], 24, 24, { borderRadius: 24 }) : h('div', { width: 24, height: 24, borderRadius: 24, background: C.tint }), m.name)))
             : h('div', { fontSize: 14, color: C.none }, '없음'));
-    return out(format, card(head, h('div', { flexDirection: 'column', gap: 10, padding: '20px 26px 22px' }, list, offRow)));
+    // 달력과 나란히 쓰므로 가로 크기를 달력에 맞춘다
+    return out(format, cardOf(CAL_W)(head, h('div', { flexDirection: 'column', gap: 10, padding: '20px 26px 22px' }, list, offRow)), CAL_W);
 }
 
 // 이번 달 달력(일요일부터). 칸마다 일정 칩: 색 막대 + 시간·누가 + 내용. 너무 많으면 +N.
-const CAL_W = 780;
 const CAL_MAX = 6;
 export async function renderCalendar({ name, soopId, logo, square, theme, weeks, events, holidays = [], today, footer, format = 'png' }) {
     const who = await profile({ soopId, logo, theme });
