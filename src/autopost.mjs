@@ -82,8 +82,8 @@ export function articleBody(soopId, post, uploads) {
             throw new Error('와고 본문 이미지와 첨부 코드 불일치');
         }
         // 와고 편집기가 저장하는 첨부 참조. src만 있으면 V3가 editor 첨부와 본문 불일치로 거절한다.
-        return `<p><a href="${escapeHTML(postUrl(soopId, post.titleNo))}" target="_blank" rel="noopener noreferrer"><img src="${escapeHTML(x.fileUrl)}" data-storage-code="${escapeHTML(x.code)}" alt="공지 전체 ${x.part}" style="max-width:100%;height:auto"></a></p>`;
-    }).join('');
+        return `<p><img src="${escapeHTML(x.fileUrl)}" data-storage-code="${escapeHTML(x.code)}" alt="공지 전체 ${x.part}" style="max-width:100%;height:auto"></p>`;
+    }).join('') + `<p style="text-align:right"><a href="${escapeHTML(postUrl(soopId, post.titleNo))}" target="_blank" rel="noopener noreferrer" style="display:inline-block;border:1px solid #e4e4e7;border-radius:999px;padding:7px 12px;background-color:#fafafa;color:#52525b;font-size:13px;font-weight:bold;text-decoration:none">원문 링크 ↗</a></p>`;
 }
 
 export const coolingDown = (state, now = Date.now()) => Number.isFinite(state.lastPostedAt) && now - state.lastPostedAt < 5 * 60000;
