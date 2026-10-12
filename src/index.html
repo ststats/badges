@@ -92,7 +92,7 @@ $('groups').innerHTML = GROUPS.map(g => `
   <div class="group-head">
     <img class="avatar${g.square ? ' square' : ''}" alt="" ${g.avatar ? `src="${g.avatar}"` : 'hidden'}>
     <div class="group-name"><h2>${esc(g.name)}</h2><p>${esc(g.sub)}</p></div>
-    <span class="pill" hidden></span>
+    <a class="pill" href="/status" hidden></a>
     <a class="btn small" href="${g.action.href}"${g.action.href.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}>${esc(g.action.label)}</a>
   </div>
   <div class="badges">${g.badges.map((b, i) => `
@@ -139,7 +139,7 @@ fetch('/status.json', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null))
     pill.hidden = false;
     pill.className = `pill ${st.state === 'ok' ? 'ok' : 'warn'}`;
     pill.textContent = st.state === 'ok' ? '쿠키 정상' : st.state === 'none' ? '쿠키 없음' : '쿠키 확인 필요';
-    pill.title = '자세히는 상태 화면에서';
+    pill.title = '상태 화면에서 자세히 보고 쿠키를 바꿀 수 있어요';
 }).catch(() => {});
 
 // 캄몬스타즈: 스타유니브 '팀 로고'

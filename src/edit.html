@@ -26,7 +26,7 @@ main { max-width: 1160px; margin: 0 auto; padding: 20px 16px 64px; display: grid
 .toggle input { width: 16px; height: 16px; accent-color: var(--ink); }
 .ev { display: flex; gap: 6px; margin-top: 8px; }
 .ev input { border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; background: #fff; min-width: 0; }
-.ev input:focus, details input:focus, details textarea:focus { outline: 2px solid #c7d2fe; outline-offset: 0; border-color: transparent; }
+.ev input:focus, details input:focus { outline: 2px solid #c7d2fe; outline-offset: 0; border-color: transparent; }
 .ev .t { width: 78px; flex: none; text-align: center; font-variant-numeric: tabular-nums; }
 .ev .x { flex: 1; }
 .ev input.bad { border-color: var(--red); background: #fff5f5; }
@@ -44,22 +44,19 @@ aside h2 { font-size: 14px; color: var(--sub); margin: 4px 0 10px; }
 details { background: var(--card); border-radius: 16px; box-shadow: var(--shadow); padding: 12px 14px; margin-top: 16px; }
 summary { font-weight: 700; cursor: pointer; }
 details input { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; margin: 8px 0; }
-details ol { padding-left: 18px; margin: 8px 0; }
-details textarea { width: 100%; min-height: 84px; border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; margin: 8px 0; font: 12px ui-monospace, monospace; resize: vertical; }
 @media (max-width: 700px) {
     .toolbar { position: static; backdrop-filter: none; -webkit-backdrop-filter: none; } /* 흐림이 있으면 fixed 저장 버튼이 막대 안에 갇힌다 */
     #save { position: fixed; right: 16px; bottom: 16px; z-index: 15; padding: 12px 22px; font-size: 15px; box-shadow: 0 8px 24px rgba(24,24,27,.25); }
     #save:disabled { opacity: 0; pointer-events: none; }
     .bar h1 { font-size: 18px; }
 }
-.cookie-msg { font-size: 13px; margin: 6px 0 0; } .cookie-msg.err { color: var(--red); } .cookie-msg.ok { color: var(--green); }
+.msg { font-size: 13px; margin: 6px 0 0; } .msg.err { color: var(--red); } .msg.ok { color: var(--green); }
 </style>
 </head>
 <body>
 <!--topbar:edit-->
 <div class="toolbar"><div class="bar">
   <h1><img id="avatar" alt="" hidden><span id="title">일정 편집</span></h1>
-  <span class="pill" id="cookiePill" hidden></span>
   <button class="btn" id="reload" type="button">다시 불러오기</button>
   <button class="btn primary" id="save" type="button" disabled>저장</button>
   <div class="status" id="status">불러오는 중…</div>
@@ -81,19 +78,7 @@ details textarea { width: 100%; min-height: 84px; border: 1px solid var(--line);
       <input id="pw" type="password" placeholder="비밀번호" autocomplete="current-password">
       <button class="btn" id="pwCheck" type="button">확인</button>
       <button class="btn" id="forget" type="button">이 브라우저에서 지우기</button>
-      <div class="cookie-msg" id="pwMsg"></div>
-    </details>
-    <details id="cookieBox">
-      <summary>SOOP 쿠키 바꾸기(즐겨찾기 글용)</summary>
-      <ol class="hint">
-        <li>PC 크롬에서 SOOP에 로그인한 채로 <a href="https://www.sooplive.co.kr/station/soju2022/board" target="_blank" rel="noopener">소주양 게시판</a>을 열기</li>
-        <li>F12 → Network → 새로고침 → 이름에 <b>board</b>가 들어간 요청 → Headers → Request Headers의 <b>cookie</b> 값 전체 복사</li>
-        <li>아래에 붙여 넣고 저장(위 편집 비밀번호를 씁니다)</li>
-      </ol>
-      <p class="hint">저장하면 서버가 SOOP에서 먹히는지 먼저 확인하고, 암호화해서 저장해요(암호문만 저장). 바로 적용돼요.</p>
-      <textarea id="cookieInput" placeholder="AbroadChk=OK; …" autocomplete="off" spellcheck="false"></textarea>
-      <button class="btn primary" id="cookieSave" type="button">쿠키 저장</button>
-      <div class="cookie-msg" id="cookieMsg"></div>
+      <div class="msg" id="pwMsg"></div>
     </details>
   </section>
   <aside>
@@ -118,7 +103,7 @@ const savedPw = {
     get: () => { try { return localStorage.getItem(PW_KEY) || ''; } catch { return ''; } },
     set: v => { try { v ? localStorage.setItem(PW_KEY, v) : localStorage.removeItem(PW_KEY); } catch {} },
 };
-const pwMsg = (text, cls = '') => { $('pwMsg').textContent = text; $('pwMsg').className = `cookie-msg ${cls}`; };
+const pwMsg = (text, cls = '') => { $('pwMsg').textContent = text; $('pwMsg').className = `msg ${cls}`; };
 $('pw').value = savedPw.get();
 if (!savedPw.get()) $('pwBox').open = true;
 $('pw').addEventListener('change', () => { savedPw.set($('pw').value); refreshButtons(); });
@@ -317,50 +302,17 @@ addEventListener('beforeunload', e => { if (dirty) e.preventDefault(); });
 
 load();
 
-// SOOP 쿠키 상태
-const COOKIE_TEXT = {
-    error: '⚠️ SOOP 쿠키가 만료됐거나 잘못됐어요. 즐겨찾기 전용 글이 뱃지에 안 나와요. 아래 "SOOP 쿠키 바꾸기"에서 새 쿠키를 넣어 주세요.',
-    stale: '⚠️ 즐겨찾기 전용 글이 하나도 안 보여요. SOOP 쿠키가 만료됐을 수 있어요. 아래 "SOOP 쿠키 바꾸기"에서 새 쿠키를 넣어 주세요.',
-    none: '⚠️ SOOP 쿠키가 없어요. 공개 글만 나와요. 아래 "SOOP 쿠키 바꾸기"에서 넣을 수 있어요.',
-};
+// SOOP 쿠키에 문제가 있을 때만 알린다(바꾸기는 상태 화면에서)
 fetch('/status.json', { cache: 'no-store' })
     .then(r => (r.ok ? r.json() : null))
     .then(st => {
-        if (!st || !st.state) return;
-        if (st.state !== 'ok') $('cookieBox').open = true;
-        if (st.state === 'unknown') return;
-        const pill = $('cookiePill');
-        pill.hidden = false;
-        pill.className = `pill ${st.state === 'ok' ? 'ok' : 'warn'}`;
-        pill.textContent = st.state === 'ok' ? `쿠키 정상 · 즐겨찾기 글 ${st.extraCount}개` : st.state === 'none' ? '쿠키 없음' : '쿠키 확인 필요';
-        if (st.state !== 'ok') {
-            const box = $('cookie');
-            box.hidden = false;
-            box.className = 'cookie warn';
-            box.innerHTML = `${COOKIE_TEXT[st.state] || COOKIE_TEXT.error} <a href="/status">자세히</a>`;
-        }
+        if (!st?.state || st.state === 'ok' || st.state === 'unknown') return;
+        const box = $('cookie');
+        box.hidden = false;
+        box.className = 'cookie warn';
+        box.innerHTML = `${st.state === 'none' ? 'SOOP 쿠키가 없어요' : 'SOOP 쿠키가 만료됐을 수 있어요'}. 즐겨찾기 전용 글이 최근 글 뱃지에 안 나와요. <a href="/status">상태에서 바꾸기 →</a>`;
     })
     .catch(() => {});
-
-$('cookieSave').addEventListener('click', async () => {
-    const msg = (text, cls = '') => { $('cookieMsg').textContent = text; $('cookieMsg').className = `cookie-msg ${cls}`; };
-    if (!savedPw.get()) return msg('위 "편집 비밀번호"를 먼저 넣어 주세요.', 'err');
-    const cookie = $('cookieInput').value.trim();
-    if (!cookie) return msg('쿠키를 붙여 넣어 주세요.', 'err');
-    $('cookieSave').disabled = true;
-    try {
-        msg('SOOP에서 이 쿠키가 먹는지 확인하고 저장하는 중…');
-        const data = await post({ file: 'cookie', cookie });
-        $('cookieInput').value = '';
-        msg(data.extraCount
-            ? `저장했어요. 즐겨찾기 전용 글 ${data.extraCount}개가 보이는 쿠키예요. 바로 적용돼요.`
-            : '저장했어요. 다만 이 쿠키로도 즐겨찾기 전용 글이 안 보여요(로그인이 풀린 쿠키일 수 있어요).', data.extraCount ? 'ok' : 'err');
-    } catch (e) {
-        msg(`저장하지 못했어요: ${e.message}`, 'err');
-    } finally {
-        $('cookieSave').disabled = false;
-    }
-});
 </script>
 </body>
 </html>
