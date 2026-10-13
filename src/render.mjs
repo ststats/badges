@@ -206,12 +206,12 @@ const cornerButton = label =>
 
 const textBlock = (text, style) => h('div', { display: 'block', wordBreak: 'keep-all', overflow: 'hidden', ...style }, text);
 
-// 일정 한 줄: [시간] [누가(일정 색 글자)] 내용. timeCol이면 시간이 없어도 칸을 비워 둔다.
+// 일정 한 줄: [고정 폭 시간] [누가(일정 색 글자)] 내용. 빈 시간은 대시로 표시한다.
 // even이면 시간·누가도 내용과 같은 크기(오늘의 일정), 아니면 시간을 조금 작게(주간 일정).
-const eventLine = (ev, timeCol, even) => {
+const eventLine = (ev, even) => {
     const digit = /^\d/.test(ev.time);
     return h('div', { alignItems: 'baseline', gap: 12 },
-        timeCol && h('div', { width: even ? 52 : 46, flexShrink: 0, fontSize: even ? 16 : digit ? 14 : 12.5, fontWeight: 700, color: digit ? C.sub : C.faint }, ev.time === '시간미정' ? '미정' : ev.time || ' '),
+        h('div', { width: 60, flexShrink: 0, fontSize: even ? 16 : digit ? 14 : 12.5, fontWeight: 700, color: digit ? C.sub : C.faint }, ev.time === '시간미정' ? '미정' : String(ev.time || '').trim() || '-'),
         h('div', { flex: 1, flexDirection: 'column', gap: 4 },
             h('div', { alignItems: 'baseline', flexWrap: 'wrap', columnGap: 8 },
                 ev.who && h('div', { fontSize: 16, fontWeight: 700, color: eventColor(ev.color)?.text || C.sub }, ev.who),
@@ -234,7 +234,7 @@ export async function renderSchedule({ name, soopId, theme, days, today, footer,
         const items = [
             offAir && h('div', { alignSelf: 'flex-start', alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 700, color: C.sub, background: isToday ? '#fff' : C.tint, borderRadius: 999, padding: '5px 12px 5px 10px' }, img(MOON, 13, 13), '휴방'),
             // 그날 시간이 있는 일정이 하나라도 있으면 시간 칸을 비워서라도 맞춘다
-            ...events.map(ev => eventLine(ev, events.some(e => e.time))),
+            ...events.map(ev => eventLine(ev)),
             !offAir && !events.length && h('div', { fontSize: 14, color: C.none }, '일정 없음'),
         ].filter(Boolean);
         return h('div', { alignItems: 'center', gap: 16, padding: '10px 12px', borderRadius: 16, marginTop: 2, background: isToday ? C.tint : 'transparent' },
@@ -253,7 +253,7 @@ export async function renderToday({ name, soopId, logo, square, theme, date, eve
     ]);
     const head = scheduleHead(who, { name, subtitle: '오늘의 일정', range: `${mmdd(date)} (${weekdayOf(date)})`, square });
     const list = events.length
-        ? events.map(ev => eventLine(ev, events.some(e => e.time), true))
+        ? events.map(ev => eventLine(ev, true))
         : [h('div', { fontSize: 15, color: C.none }, '오늘 등록된 일정이 없습니다')];
     const offRow = h('div', { alignItems: 'center', gap: 12, marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.tint}` },
         h('div', { alignItems: 'center', gap: 6, flexShrink: 0, fontSize: 13.5, fontWeight: 700, color: C.sub, background: C.tint, borderRadius: 999, padding: '5px 12px 5px 10px' }, img(MOON, 13, 13), '휴방'),
@@ -279,12 +279,15 @@ export async function renderCalendar({ name, soopId, logo, square, theme, weeks,
             h('div', { width: colW, justifyContent: 'center', fontSize: 12, fontWeight: 700, color: i === 0 ? C.red : i === 6 ? C.blue : C.sub }, wd)));
     const chip = ev => {
         const color = eventColor(ev.color) || { bar: C.faint, text: C.sub, bg: C.tint };
-        const label = [ev.time === '시간미정' ? '미정' : ev.time, ev.who].filter(Boolean).join(' ');
+        const time = ev.time === '시간미정' ? '미정' : String(ev.time || '').trim() || '-';
+        const label = ev.subjectLabel || ev.who;
         // 색 막대는 칩 안에 따로 세운다(둥근 칩에 왼쪽 테두리를 주면 막대가 휘어 보인다)
         return h('div', { gap: 5, borderRadius: 7, background: color.bg, padding: '4px 6px 4px 4px', flexShrink: 0 },
             h('div', { width: 3, borderRadius: 3, background: color.bar, flexShrink: 0 }),
             h('div', { flex: 1, flexDirection: 'column', overflow: 'hidden' },
-                label && textBlock(label, { fontSize: 10.5, fontWeight: 700, color: color.text, lineHeight: 1.3, whiteSpace: 'nowrap', textOverflow: 'ellipsis' }),
+                h('div', { alignItems: 'baseline', gap: 4 },
+                    textBlock(time, { width: 32, flexShrink: 0, fontSize: 10.5, fontWeight: 700, color: color.text, lineHeight: 1.3 }),
+                    label && textBlock(label, { flex: 1, fontSize: 10.5, fontWeight: 700, color: color.text, lineHeight: 1.3, wordBreak: 'keep-all' })),
                 ev.text && textBlock(ev.text, { fontSize: 11.5, fontWeight: 700, color: C.ink, lineHeight: 1.3, lineClamp: 2 })));
     };
     const cell = ({ date, inMonth }, i) => {

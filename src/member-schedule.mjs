@@ -42,3 +42,18 @@ export function memberWeek(data, soopId, now) {
         })),
     };
 }
+
+// Match the main calendar: personal subjects exclude themselves from the count.
+export function subjectLabel(event, members) {
+    const owner = resolveMember(members, event.who);
+    const subject = owner ? String(owner['이름']).slice(-2) : event.who;
+    if (!event.participants.length) return subject;
+    if (event.subjectType === 'person') {
+        const hasOwner = event.participants.some(p => owner && p.soop_id
+            ? idOf(p.soop_id) === idOf(owner['SOOP ID'])
+            : (resolveMember(members, p.name, p.soop_id)?.['이름']?.slice(-2) || p.name) === subject);
+        const extras = event.participants.length - (hasOwner ? 1 : 0);
+        return extras ? `${subject} 외 ${extras}인` : subject;
+    }
+    return `${subject} · ${event.participants.length}인`;
+}

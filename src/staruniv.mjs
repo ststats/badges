@@ -3,7 +3,7 @@
 import { config } from './config.mjs';
 import { keepFresh } from './cache.mjs';
 import { rpc } from './store.mjs';
-import { eventMembers, resolveMember } from './member-schedule.mjs';
+import { eventMembers, resolveMember, subjectLabel } from './member-schedule.mjs';
 
 const TIME_RE = /^\d{1,2}:\d{2}$/;
 
@@ -18,8 +18,9 @@ export function starEvents(rows, members = []) {
             if (!text && time && !TIME_RE.test(time) && time !== '시간미정') [text, time] = [time, ''];
             const subject = String(r.person || '').trim();
             const owner = r.subject_type === 'person' ? resolveMember(members, subject) : null;
-            return { date: r.start_date, end: r.end_date || r.start_date, time, who: owner?.['이름'] || subject, text, color: r.color || '', order,
+            const event = { date: r.start_date, end: r.end_date || r.start_date, time, who: owner?.['이름'] || subject, text, color: r.color || '', order,
                 subjectType: r.subject_type || 'other', participants: eventMembers(r, members) };
+            return { ...event, subjectLabel: subjectLabel(event, members) };
         });
 }
 

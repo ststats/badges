@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Readable } from 'node:stream';
 import sharp from 'sharp';
-import { memberWeek, resolveMember } from '../src/member-schedule.mjs';
+import { memberWeek, resolveMember, subjectLabel } from '../src/member-schedule.mjs';
 import { starEvents, starOffAir } from '../src/staruniv.mjs';
 import { renderSchedule, renderToday, renderCalendar } from '../src/render.mjs';
 import { monthWeeks } from '../src/lib.mjs';
@@ -18,6 +18,18 @@ const rows = [
     {start_date:'2026-10-14',person:'대회',subject_type:'competition',title:'다른 멤버',participants:[{soop_id:'minchul',name:'소주양'}]},
 ];
 const data = {members, events:starEvents(rows,members),offAir:starOffAir([{off_date:'2026-10-14',soop_id:'soju2022'}],members)};
+
+test('badge calendar subject counts match the main calendar', () => {
+    const people = [{soop_id:'minchul',name:'김민철'},{soop_id:'soju2022',name:'소주양'}];
+    assert.equal(subjectLabel({who:'김민철',subjectType:'person',participants:people},members),'민철 외 1인');
+    assert.equal(subjectLabel({who:'민철',subjectType:'person',participants:people.slice(0,1)},members),'민철');
+    assert.equal(subjectLabel({who:'소주양',subjectType:'person',participants:people.slice(0,1)},members),'주양 외 1인');
+    assert.equal(subjectLabel({who:'캄몬',subjectType:'group',participants:people},members),'캄몬 · 2인');
+    assert.equal(subjectLabel({who:'ASL22',subjectType:'competition',participants:people},members),'ASL22 · 2인');
+    assert.equal(subjectLabel({who:'김민철',subjectType:'person',participants:[]},members),'민철');
+    const [event] = starEvents([{...rows[0], person:'민철',subject_type:'person',participants:[...people,people[0]]}],members);
+    assert.equal(event.subjectLabel,'민철 외 1인');
+});
 
 test('member schedule uses authoritative IDs, individual subjects, date ranges, and per-member off-air', () => {
     const soju = memberWeek(data,'soju2022',now);
