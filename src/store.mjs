@@ -26,7 +26,9 @@ export async function getFile(name) {
     if (hit && Date.now() - hit.at < MEMO_MS) return hit.value;
     let value;
     try {
-        const row = (await rpc('badge_get', { p_name: name }))?.[0];
+        const row = (await (name === 'cookie'
+            ? rpc('badge_get_secret', { p_secret: process.env.BADGE_WRITE_SECRET || '' })
+            : rpc('badge_get', { p_name: name })))?.[0];
         value = row ? { content: row.content, version: row.updated_at } : null;
         lastGood.set(name, value);
     } catch (e) {
