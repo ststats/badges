@@ -1,11 +1,10 @@
-// 세 화면(뱃지 모음 · 일정 편집 · 상태)이 같이 쓰는 머리와 위 막대. 한 사이트처럼 오가게 모양을 맞춘다.
-// 정적 화면(src/index.html, src/edit.html)은 빌드(scripts/vercel-public.mjs)가 자리표시를 이걸로 바꾸고,
+// 두 화면(뱃지 모음 · 상태)이 같이 쓰는 머리와 위 막대. 한 사이트처럼 오가게 모양을 맞춘다.
+// 정적 화면(src/index.html)은 빌드(scripts/vercel-public.mjs)가 자리표시를 이걸로 바꾸고,
 // /status(api/status.js)는 직접 쓴다.
 import { escapeHTML as esc } from './lib.mjs';
 
 const TABS = [
     ['home', '/', '뱃지 모음'],
-    ['edit', '/edit/', '일정 편집'],
     ['status', '/status', '상태'],
 ];
 

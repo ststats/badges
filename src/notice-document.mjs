@@ -115,7 +115,7 @@ export async function captureNotice(browser, html) {
             }
             const top = Math.round(y * scale);
             const bottom = Math.min(meta.height, Math.round(end * scale));
-            images.push(await sharp(full).extract({ left: 0, top, width: meta.width, height: bottom - top }).png().toBuffer());
+            images.push(await sharp(full).extract({ left: 0, top, width: meta.width, height: bottom - top }).resize({ width: 900 }).png().toBuffer());
             y = end;
         }
         return images;

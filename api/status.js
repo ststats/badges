@@ -76,7 +76,7 @@ ${topbar('status')}
 </section>
 </main>
 <script>
-// 편집 비밀번호는 일정 편집 화면과 같은 곳(이 브라우저)에 기억한다
+// 쿠키 변경 비밀번호는 이 브라우저에 기억한다
 const PW_KEY = 'badges-edit-password';
 const $ = id => document.getElementById(id);
 try { $('pw').value = localStorage.getItem(PW_KEY) || ''; } catch {}

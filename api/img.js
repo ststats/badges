@@ -8,8 +8,8 @@ import crypto from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import { config } from '../src/config.mjs';
 import { query } from '../src/http.mjs';
-import { eventsOn, kstToday, monthWeeks, parseSchedule, weekSchedule } from '../src/lib.mjs';
-import { scheduleFile } from '../src/live.mjs';
+import { eventsOn, kstToday, monthWeeks } from '../src/lib.mjs';
+import { memberWeek } from '../src/member-schedule.mjs';
 import { starLogo, starSchedule } from '../src/staruniv.mjs';
 
 // 그림 도구(satori·sharp·resvg)는 실제로 그릴 때만 불러온다(돌려보내기만 하는 요청이 가볍게 뜨게)
@@ -19,18 +19,17 @@ const loadRenderer = () => (renderer ||= import('../src/render.mjs'));
 const BUILD = process.env.VERCEL_GIT_COMMIT_SHA || 'dev'; // 코드가 바뀌면 그림도 새로
 const prewarmed = new Map();
 
-const soju = { name: config.name, soopId: config.soopId, theme: config.theme };
 // 캄몬스타즈 로고(못 읽으면 로고 자리만 비운다)
 const star = async () => ({ name: config.staruniv.name, logo: await starLogo().catch(() => null), square: true });
 
 // 뱃지마다: 그림에 들어갈 값(args)과 그릴 함수, 고정 주소를 CDN이 기억할 초(fresh)
-// 소주양 일정은 편집 화면에서 저장하면 바로 바뀌므로 20초, 나머지는 1분
+// 일정 고정 주소는 1분 캐시한다. 모든 일정은 스타유니브에서 조회한다.
 const BADGES = {
     soju: {
         async schedule() {
             const now = Date.now();
-            const days = weekSchedule(parseSchedule((await scheduleFile()).content, now), now);
-            return { args: { ...soju, footer: config.schedule?.footer, days, today: kstToday(now) }, draw: 'renderSchedule', fresh: 20 };
+            const week = memberWeek(await starSchedule(), config.soopId, now);
+            return { args: { ...week, theme: config.theme, footer: config.schedule?.footer, today: kstToday(now) }, draw: 'renderSchedule', fresh: 60 };
         },
     },
     staruniv: {
@@ -59,6 +58,13 @@ const BADGES = {
 async function badge(q) {
     const t = q.get('t');
     const b = q.get('b');
+    if (t === 'member' && b === 'schedule') {
+        const now = Date.now();
+        const week = memberWeek(await starSchedule(), q.get('id'), now);
+        const args = { ...week, footer: config.schedule?.footer, today: kstToday(now) };
+        return { base: `member/${encodeURIComponent(week.soopId)}/schedule`, args, fresh: 60,
+            render: async () => (await loadRenderer()).renderSchedule(args) };
+    }
     const make = Object.hasOwn(BADGES, t) && Object.hasOwn(BADGES[t], b) && BADGES[t][b];
     if (!make) throw Object.assign(new Error('없는 뱃지입니다'), { status: 404 });
     const { args, draw, fresh } = await make();

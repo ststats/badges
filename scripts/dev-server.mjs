@@ -6,10 +6,10 @@ import { root } from '../src/config.mjs';
 import img from '../api/img.js';
 import status from '../api/status.js';
 import save from '../api/save.js';
-import preview from '../api/preview.js';
+import members from '../api/members.js';
 
 const vercel = JSON.parse(await fs.readFile(path.join(root, 'vercel.json'), 'utf-8'));
-const handlers = { '/api/img': img, '/api/status': status, '/api/save': save, '/api/preview': preview };
+const handlers = { '/api/img': img, '/api/status': status, '/api/save': save, '/api/members': members };
 const toRegex = src =>
     new RegExp('^' + src.replace(/[.]/g, '\\.').replace(/:(\w+)\(([^)]+)\)/g, '(?<$1>$2)').replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$');
 const types = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript', '.json': 'application/json', '.css': 'text/css' };

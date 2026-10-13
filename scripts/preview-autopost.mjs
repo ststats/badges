@@ -8,7 +8,7 @@ import { noticeDocument, captureNotice } from '../src/notice-document.mjs';
 
 const dest = path.resolve(process.argv[2] || 'work/autopost-preview');
 await fs.mkdir(dest, { recursive: true });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, ...(process.env.CHROME ? { executablePath: process.env.CHROME } : {}) });
 try {
     const fixture = await sharp({ create: { width: 700, height: 280, channels: 3, background: '#e8eefc' } }).png().toBuffer();
     const wrapped = { async newContext(opts) {
@@ -23,10 +23,10 @@ try {
     const images = await captureNotice(wrapped, html);
     assert.ok(images.length > 1);
     const metas = await Promise.all(images.map(p => sharp(p).metadata()));
-    assert.ok(metas.every(p => p.width === 1182 && p.height > 0));
+    assert.ok(metas.every(p => p.width === 900 && p.height > 0));
     for (let i = 0; i < images.length; i++) await fs.writeFile(path.join(dest, `preview-${i + 1}.png`), images[i]);
     await fs.writeFile(path.join(dest, 'preview.html'), html);
-    const stitched = await sharp({ create: { width: 1182, height: metas.reduce((n, p) => n + p.height, 0), channels: 3, background: '#fff' } }).composite(images.map((input, i) => ({ input, left: 0, top: metas.slice(0, i).reduce((n, p) => n + p.height, 0) }))).png().toBuffer();
+    const stitched = await sharp({ create: { width: 900, height: metas.reduce((n, p) => n + p.height, 0), channels: 3, background: '#fff' } }).composite(images.map((input, i) => ({ input, left: 0, top: metas.slice(0, i).reduce((n, p) => n + p.height, 0) }))).png().toBuffer();
     await fs.writeFile(path.join(dest, 'preview-full.png'), stitched);
     console.log(`전체 문단 100개·사진 7장 미리보기: ${images.length}장, 전체 ${metas.reduce((n, p) => n + p.height, 0)}px`);
 } finally { await browser.close(); }

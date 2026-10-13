@@ -1,4 +1,4 @@
-// 뱃지 그림: satori(요소 → SVG) + resvg(SVG → PNG). 편집 화면 미리보기는 SVG 그대로 쓴다.
+// 뱃지 그림: satori(요소 → SVG) + resvg(SVG → PNG). SVG 출력도 지원한다.
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import satori from 'satori';
@@ -126,7 +126,6 @@ export const profile = ({ soopId, logo, theme }) =>
         const avatar = !buf ? null : logo ? logoOf(logo, buf, 120) : thumbOf(`profile|${soopId}`, buf, 120);
         const [avatarUri, colors] = await Promise.all([avatar, theme || paletteOf(buf)]);
         return { avatar: avatarUri, colors };
-        return { avatar, colors };
     }).then(v => v || { avatar: null, colors: theme || NEUTRAL });
 
 // 이모지는 Twemoji 그림으로 그린다(Pretendard에 없음)
@@ -213,12 +212,15 @@ const eventLine = (ev, timeCol, even) => {
     const digit = /^\d/.test(ev.time);
     return h('div', { alignItems: 'baseline', gap: 12 },
         timeCol && h('div', { width: even ? 52 : 46, flexShrink: 0, fontSize: even ? 16 : digit ? 14 : 12.5, fontWeight: 700, color: digit ? C.sub : C.faint }, ev.time === '시간미정' ? '미정' : ev.time || ' '),
-        h('div', { flex: 1, alignItems: 'baseline', flexWrap: 'wrap', columnGap: 8 },
-            ev.who && h('div', { fontSize: 16, fontWeight: 700, color: eventColor(ev.color)?.text || C.sub }, ev.who),
-            h('div', { fontSize: 16, fontWeight: 700, lineHeight: 1.4, wordBreak: 'keep-all' }, ev.text)));
+        h('div', { flex: 1, flexDirection: 'column', gap: 4 },
+            h('div', { alignItems: 'baseline', flexWrap: 'wrap', columnGap: 8 },
+                ev.who && h('div', { fontSize: 16, fontWeight: 700, color: eventColor(ev.color)?.text || C.sub }, ev.who),
+                h('div', { fontSize: 16, fontWeight: 700, lineHeight: 1.4, wordBreak: 'keep-all' }, ev.text)),
+            ev.participants?.length && h('div', { fontSize: 12.5, color: C.sub, lineHeight: 1.4, wordBreak: 'keep-all' },
+                `참가: ${ev.participants.map(p => p.name).join(' · ')}`)));
 };
 
-// 주간 일정. format: 'png'(뱃지) 또는 'svg'(편집 화면 미리보기: 그림으로 바꾸지 않아 훨씬 빠르다)
+// 주간 일정. format: 'png'(뱃지) 또는 'svg'(벡터 출력)
 export async function renderSchedule({ name, soopId, theme, days, today, footer, format = 'png' }) {
     const who = await profile({ soopId, theme });
     const head = scheduleHead(who, { name, subtitle: '이번 주 방송 일정', range: `${mmdd(days[0].date)} – ${mmdd(days[6].date)}` });
@@ -306,5 +308,5 @@ const out = (format, tree, width = CARD_W) => (format === 'svg' ? toSvg(tree, wi
 
 async function png(tree, width) {
     const svg = await toSvg(tree, width);
-    return new Resvg(svg, { fitTo: { mode: 'original' }, font: { loadSystemFonts: false } }).render().asPng();
+    return new Resvg(svg, { fitTo: { mode: 'width', value: 900 }, font: { loadSystemFonts: false } }).render().asPng();
 }

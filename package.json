@@ -16,9 +16,12 @@
     "jose": "6.2.12",
     "sanitize-html": "2.18.0",
     "satori": "0.47.1",
-    "sharp": "0.34.4"
+    "sharp": "0.35.5"
   },
   "devDependencies": {
     "playwright": "1.64.0"
+  },
+  "overrides": {
+    "fflate": "0.7.5"
   }
 }

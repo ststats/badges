@@ -1,11 +1,11 @@
-// SOOP 게시판 읽기와 로그인 쿠키(즐겨찾기 전용 글용), 일정 읽기
+// SOOP 게시판 읽기와 로그인 쿠키(즐겨찾기 전용 글용)
 import crypto from 'node:crypto';
 import { config } from './config.mjs';
 import { boardApiUrl, recentOwnPosts } from './lib.mjs';
 import { keepFresh } from './cache.mjs';
 import { getFile } from './store.mjs';
 
-// ----- 쿠키: 편집 화면에서 저장한 암호문(badge_files의 cookie)을 COOKIE_KEY로 푼다 -----
+// ----- 쿠키: 상태 화면에서 저장한 암호문(badge_files의 cookie)을 COOKIE_KEY로 푼다 -----
 const cookieCipherKey = () => crypto.createHash('sha256').update(process.env.COOKIE_KEY || '').digest();
 export const cookieKeyReady = () => (process.env.COOKIE_KEY || '').length >= 16;
 
@@ -87,7 +87,7 @@ const extraPosts = (mine, pub) => {
     return mine.filter(p => !pubIds.has(p.titleNo));
 };
 
-// 편집 화면이 새 쿠키를 저장하기 전에 SOOP이 받아 주는지 본다. 공개 목록에 없는 글 수를 돌려준다.
+// 상태 화면이 새 쿠키를 저장하기 전에 SOOP이 받아 주는지 본다. 공개 목록에 없는 글 수를 돌려준다.
 export async function checkCookie(cookie) {
     const [mine, pub] = await Promise.all([fetchBoard(cookie), boards.public()]);
     return extraPosts(mine, pub).length;
@@ -98,6 +98,3 @@ export async function cookieStatus() {
     const [cookie, mine, pub] = await Promise.all([currentCookie(), boards.mine(), boards.public()]);
     return { hasCookie: !!cookie, error: lastCookieError, extra: extraPosts(mine, pub), posts: mine };
 }
-
-// ----- 일정 -----
-export const scheduleFile = async () => (await getFile('schedule')) || { content: '', version: null };

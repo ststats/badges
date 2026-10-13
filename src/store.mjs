@@ -1,7 +1,4 @@
-// 일정·쿠키 저장소: 스타유니브 Supabase의 badge_files 표(supabase/badges.sql). 저장하면 바로 반영된다.
-// 일정은 badge_get, 쿠키는 BADGE_WRITE_SECRET을 검증하는 badge_get_secret으로 읽는다.
-// 쓰기는 같은 서버 비밀값을 검증하는 badge_put으로 한다.
-// Supabase가 잠깐 안 되면 직전에 읽은 값을 쓴다.
+// 암호화된 SOOP 쿠키만 저장한다. 일정은 api_schedule에서 조회한다.
 import { config } from './config.mjs';
 
 const MEMO_MS = 10000; // 같은 함수 인스턴스 안에서는 10초 기억(뱃지 요청마다 DB를 부르지 않게)
@@ -23,13 +20,12 @@ export async function rpc(fn, args) {
 
 // { content, version } 또는 아무것도 없으면 null
 export async function getFile(name) {
+    if (name !== 'cookie') throw Object.assign(new Error('일정 별도 저장소는 폐지되었습니다'), { status: 410 });
     const hit = memo.get(name);
     if (hit && Date.now() - hit.at < MEMO_MS) return hit.value;
     let value;
     try {
-        const row = (await (name === 'cookie'
-            ? rpc('badge_get_secret', { p_secret: process.env.BADGE_WRITE_SECRET || '' })
-            : rpc('badge_get', { p_name: name })))?.[0];
+        const row = (await rpc('badge_get_secret', { p_secret: process.env.BADGE_WRITE_SECRET || '' }))?.[0];
         value = row ? { content: row.content, version: row.updated_at } : null;
         lastGood.set(name, value);
     } catch (e) {
@@ -42,6 +38,7 @@ export async function getFile(name) {
 
 // 새 version을 돌려준다. expected가 있고 그사이 바뀌었으면 409.
 export async function putFile(name, content, expected) {
+    if (name !== 'cookie') throw Object.assign(new Error('일정 별도 저장소는 폐지되었습니다'), { status: 410 });
     const secret = process.env.BADGE_WRITE_SECRET;
     if (!secret) throw Object.assign(new Error('Vercel 환경 변수 BADGE_WRITE_SECRET이 없습니다'), { status: 500 });
     try {

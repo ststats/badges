@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { monthWeeks, parseSchedule, weekSchedule } from '../src/lib.mjs';
+import { monthWeeks, weekSchedule } from '../src/lib.mjs';
 import { renderCalendar, renderSchedule, renderToday } from '../src/render.mjs';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
@@ -9,7 +9,7 @@ const soopId = 'no-such-user-for-test';
 
 test('일정 뱃지를 PNG로 그린다', async () => {
     const now = Date.parse('2026-10-14T05:00:00Z');
-    const days = weekSchedule(parseSchedule('10.12 20:00 주양CK\n10.13 휴방\n10.14 시간미정 합방', now), now);
+    const days = weekSchedule({ events: [{date: '2026-10-12', time: '20:00', text: '주양CK', order: 0}], offAir: new Set(['2026-10-13']) }, now);
     const png = await renderSchedule({ name: '소주양', soopId, days, today: '2026-10-14', footer: '방송국 가기' });
     assert.deepEqual(png.subarray(0, 4), PNG);
 });
