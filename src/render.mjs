@@ -281,16 +281,13 @@ export async function renderCalendar({ name, soopId, logo, square, theme, weeks,
         const color = eventColor(ev.color) || { bar: C.faint, text: C.sub, bg: C.tint };
         const time = ev.time === '시간미정' ? '미정' : String(ev.time || '').trim() || '-';
         const label = ev.subjectLabel || ev.who;
-        const parts = label?.match(/^(.*?)( 외 \d+인| · \d+인)$/);
-        const labels = parts ? [parts[1], parts[2].trim()] : [label];
         // 색 막대는 칩 안에 따로 세운다(둥근 칩에 왼쪽 테두리를 주면 막대가 휘어 보인다)
         return h('div', { gap: 5, borderRadius: 7, background: color.bg, padding: '4px 6px 4px 4px', flexShrink: 0 },
             h('div', { width: 3, borderRadius: 3, background: color.bar, flexShrink: 0 }),
             h('div', { flex: 1, flexDirection: 'column', overflow: 'hidden' },
-                h('div', { alignItems: 'baseline', gap: 4 },
-                    textBlock(time, { width: 32, flexShrink: 0, fontSize: 10.5, fontWeight: 700, color: color.text, lineHeight: 1.3 }),
-                    label && h('div', { flex: 1, flexWrap: 'wrap', columnGap: 2, alignItems: 'baseline' },
-                        labels.map(text => textBlock(text, { fontSize: 10.5, fontWeight: 700, color: color.text, lineHeight: 1.3, whiteSpace: 'nowrap' })))),
+                h('div', { alignItems: 'baseline', gap: 3 },
+                    textBlock(time, { width: 27, flexShrink: 0, fontSize: 9, fontWeight: 700, color: color.text, lineHeight: 1.3 }),
+                    label && textBlock(label, { flex: 1, fontSize: 9, fontWeight: 700, color: color.text, lineHeight: 1.3, whiteSpace: 'nowrap' })),
                 ev.text && textBlock(ev.text, { fontSize: 11.5, fontWeight: 700, color: C.ink, lineHeight: 1.3, lineClamp: 2 })));
     };
     const cell = ({ date, inMonth }, i) => {
