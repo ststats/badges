@@ -1,0 +1,24 @@
+{
+  "name": "badges",
+  "private": true,
+  "type": "module",
+  "description": "소주양·스타유니브 뱃지(Vercel에서 볼 때마다 그림)",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "dev": "node scripts/vercel-public.mjs && node scripts/dev-server.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "2.6.2",
+    "@vercel/functions": "3.9.11",
+    "jose": "6.2.12",
+    "sanitize-html": "2.18.0",
+    "satori": "0.47.1",
+    "sharp": "0.34.4"
+  },
+  "devDependencies": {
+    "playwright": "1.64.0"
+  }
+}
