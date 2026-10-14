@@ -5,7 +5,10 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 export const escapeHTML = s =>
-    String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    String(s ?? '').replace(
+        /[&<>"']/g,
+        c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+    );
 
 // SOOP 날짜('2026-10-08 20:15:43')는 한국 시간이다
 const soopDateMs = s => Date.parse(String(s || '').replace(' ', 'T') + '+09:00') || 0;
@@ -33,7 +36,8 @@ export function recentOwnPosts(board, soopId, limit) {
 // 한국 시간 기준 이번 주 월~일 'YYYY-MM-DD'
 export function weekDates(nowMs) {
     const kst = new Date(nowMs + KST_OFFSET_MS);
-    const monday = Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate()) - ((kst.getUTCDay() + 6) % 7) * DAY_MS;
+    const monday =
+        Date.UTC(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate()) - ((kst.getUTCDay() + 6) % 7) * DAY_MS;
     return Array.from({ length: 7 }, (_, i) => new Date(monday + i * DAY_MS).toISOString().slice(0, 10));
 }
 
@@ -60,10 +64,12 @@ export function monthWeeks(nowMs) {
     const last = Date.UTC(y, m, 0);
     const weeks = [];
     for (let t = start; t <= last; t += 7 * DAY_MS)
-        weeks.push(Array.from({ length: 7 }, (_, i) => {
-            const date = new Date(t + i * DAY_MS).toISOString().slice(0, 10);
-            return { date, inMonth: Number(date.slice(5, 7)) === m };
-        }));
+        weeks.push(
+            Array.from({ length: 7 }, (_, i) => {
+                const date = new Date(t + i * DAY_MS).toISOString().slice(0, 10);
+                return { date, inMonth: Number(date.slice(5, 7)) === m };
+            })
+        );
     return weeks;
 }
 

@@ -8,8 +8,12 @@ import { escapeHTML, formatPostDate } from './lib.mjs';
 export function safeImage(url) {
     try {
         const u = new URL(url);
-        return u.protocol === 'https:' && /(^|\.)(sooplive\.(com|co\.kr)|afreecatv\.com|afreeca\.com)$/.test(u.hostname) ? u.href : '';
-    } catch { return ''; }
+        return u.protocol === 'https:' && /(^|\.)(sooplive\.(com|co\.kr)|afreecatv\.com|afreeca\.com)$/.test(u.hostname)
+            ? u.href
+            : '';
+    } catch {
+        return '';
+    }
 }
 
 // SOOP 본문과 첨부 목록은 동일한 stimg 파일에 서로 다른 도메인을 쓴다.
@@ -27,8 +31,21 @@ export function fullContent(post) {
     }
     const html = sanitize(post.content.content, {
         allowedTags: [...sanitize.defaults.allowedTags, 'img', 'br', 's', 'u'],
-        allowedAttributes: { a: ['href'], img: ['src', 'alt'], '*': ['style'], td: ['colspan', 'rowspan'], th: ['colspan', 'rowspan'] },
-        allowedStyles: { '*': { 'text-align': [/^(left|center|right)$/], color: [/^#[0-9a-f]{3,8}$/i], 'font-weight': [/^(bold|[1-9]00)$/], 'text-decoration': [/^(underline|line-through)$/] } },
+        allowedAttributes: {
+            a: ['href'],
+            img: ['src', 'alt'],
+            '*': ['style'],
+            td: ['colspan', 'rowspan'],
+            th: ['colspan', 'rowspan'],
+        },
+        allowedStyles: {
+            '*': {
+                'text-align': [/^(left|center|right)$/],
+                color: [/^#[0-9a-f]{3,8}$/i],
+                'font-weight': [/^(bold|[1-9]00)$/],
+                'text-decoration': [/^(underline|line-through)$/],
+            },
+        },
         allowedSchemes: ['https', 'http'],
         transformTags: {
             img: (_tag, attrs) => {
@@ -37,27 +54,41 @@ export function fullContent(post) {
                 return { tagName: 'img', attribs: { src, alt: attrs.alt || '' } };
             },
             // 재생 가능한 첨부는 이미지에 담을 수 없으므로 자동 게시 전 확인을 요구한다.
-            iframe: () => { throw new Error('원문에 영상이 있습니다. 이미지로 모두 담을 수 없어 등록을 중단했습니다'); },
-            video: () => { throw new Error('원문에 영상이 있습니다. 이미지로 모두 담을 수 없어 등록을 중단했습니다'); },
+            iframe: () => {
+                throw new Error('원문에 영상이 있습니다. 이미지로 모두 담을 수 없어 등록을 중단했습니다');
+            },
+            video: () => {
+                throw new Error('원문에 영상이 있습니다. 이미지로 모두 담을 수 없어 등록을 중단했습니다');
+            },
         },
     });
-    const present = new Set([...html.matchAll(/<img[^>]*src="([^"]+)"/g)].map(m => imageIdentity(m[1].replace(/&amp;/g, '&'))));
-    const extras = (post.photos || []).map(p => {
-        const url = safeImage(p.url);
-        if (!url) throw new Error('사진 주소를 확인할 수 없습니다');
-        const identity = imageIdentity(url);
-        if (present.has(identity)) return '';
-        present.add(identity);
-        return `<p><img src="${escapeHTML(url)}" alt="첨부 사진"></p>`;
-    }).join('');
+    const present = new Set(
+        [...html.matchAll(/<img[^>]*src="([^"]+)"/g)].map(m => imageIdentity(m[1].replace(/&amp;/g, '&')))
+    );
+    const extras = (post.photos || [])
+        .map(p => {
+            const url = safeImage(p.url);
+            if (!url) throw new Error('사진 주소를 확인할 수 없습니다');
+            const identity = imageIdentity(url);
+            if (present.has(identity)) return '';
+            present.add(identity);
+            return `<p><img src="${escapeHTML(url)}" alt="첨부 사진"></p>`;
+        })
+        .join('');
     return html + extras;
 }
 
 export async function noticeDocument({ name, post, avatar, colors }) {
-    const fonts = await Promise.all([['Regular', 400], ['Bold', 700], ['ExtraBold', 800]].map(async ([name, weight]) => {
-        const data = await fs.readFile(path.join(root, 'fonts', `Pretendard-${name}.woff`));
-        return `@font-face{font-family:Pretendard;src:url(data:font/woff;base64,${data.toString('base64')});font-weight:${weight}}`;
-    }));
+    const fonts = await Promise.all(
+        [
+            ['Regular', 400],
+            ['Bold', 700],
+            ['ExtraBold', 800],
+        ].map(async ([name, weight]) => {
+            const data = await fs.readFile(path.join(root, 'fonts', `Pretendard-${name}.woff`));
+            return `@font-face{font-family:Pretendard;src:url(data:font/woff;base64,${data.toString('base64')});font-weight:${weight}}`;
+        })
+    );
     const from = /^#[0-9a-f]{6}$/i.test(colors?.from) ? colors.from : '#eceef3';
     const to = /^#[0-9a-f]{6}$/i.test(colors?.to) ? colors.to : '#f5f5f7';
     const boardName = typeof post.display?.bbsName === 'string' ? post.display.bbsName.trim() : '';
@@ -76,15 +107,21 @@ export async function captureNotice(browser, html) {
     const context = await browser.newContext({ viewport: { width: 788, height: 1000 }, deviceScaleFactor: 1.5 });
     try {
         const page = await context.newPage();
-        await page.route('**/*', route => safeImage(route.request().url()) ? route.fallback() : route.abort());
+        await page.route('**/*', route => (safeImage(route.request().url()) ? route.fallback() : route.abort()));
         await page.setContent(html, { waitUntil: 'load', timeout: 45000 });
         await page.evaluate(async () => {
             await document.fonts.ready;
-            await Promise.all([...document.images].map(async img => {
-                if (!img.complete) await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; });
-                if (!img.naturalWidth) throw new Error('원문 사진 로딩 실패');
-                await img.decode();
-            }));
+            await Promise.all(
+                [...document.images].map(async img => {
+                    if (!img.complete)
+                        await new Promise((resolve, reject) => {
+                            img.onload = resolve;
+                            img.onerror = reject;
+                        });
+                    if (!img.naturalWidth) throw new Error('원문 사진 로딩 실패');
+                    await img.decode();
+                })
+            );
         });
         const layout = await page.evaluate(() => {
             const spans = [];
@@ -95,7 +132,10 @@ export async function captureNotice(browser, html) {
                 range.selectNodeContents(walker.currentNode);
                 for (const r of range.getClientRects()) if (r.height) spans.push([r.top, r.bottom]);
             }
-            for (const img of document.images) { const r = img.getBoundingClientRect(); spans.push([r.top, r.bottom]); }
+            for (const img of document.images) {
+                const r = img.getBoundingClientRect();
+                spans.push([r.top, r.bottom]);
+            }
             return { height: Math.ceil(document.body.getBoundingClientRect().height), spans };
         });
         if (layout.height > 100000) throw new Error('공지 이미지가 너무 깁니다. 생략하지 않고 등록을 중단했습니다');
@@ -115,9 +155,17 @@ export async function captureNotice(browser, html) {
             }
             const top = Math.round(y * scale);
             const bottom = Math.min(meta.height, Math.round(end * scale));
-            images.push(await sharp(full).extract({ left: 0, top, width: meta.width, height: bottom - top }).resize({ width: 900 }).png().toBuffer());
+            images.push(
+                await sharp(full)
+                    .extract({ left: 0, top, width: meta.width, height: bottom - top })
+                    .resize({ width: 900 })
+                    .png()
+                    .toBuffer()
+            );
             y = end;
         }
         return images;
-    } finally { await context.close(); }
+    } finally {
+        await context.close();
+    }
 }

@@ -29,7 +29,11 @@ const BADGES = {
         async schedule() {
             const now = Date.now();
             const week = memberWeek(await starSchedule(), config.soopId, now);
-            return { args: { ...week, theme: config.theme, footer: config.schedule?.footer, today: kstToday(now) }, draw: 'renderSchedule', fresh: 60 };
+            return {
+                args: { ...week, theme: config.theme, footer: config.schedule?.footer, today: kstToday(now) },
+                draw: 'renderSchedule',
+                fresh: 60,
+            };
         },
     },
     staruniv: {
@@ -37,7 +41,11 @@ const BADGES = {
             const now = Date.now();
             const date = kstToday(now);
             const [{ events, offAir }, who] = await Promise.all([starSchedule(), star()]);
-            return { args: { ...who, date, events: eventsOn(events, date), offAir: offAir[date] || [] }, draw: 'renderToday', fresh: 60 };
+            return {
+                args: { ...who, date, events: eventsOn(events, date), offAir: offAir[date] || [] },
+                draw: 'renderToday',
+                fresh: 60,
+            };
         },
         async calendar() {
             const now = Date.now();
@@ -46,10 +54,15 @@ const BADGES = {
             const [first, last] = [weeks[0][0].date, weeks.at(-1)[6].date];
             return {
                 // 이번 달 칸에 걸치는 일정과 공휴일만 넣는다(다른 달 일정이 바뀌어도 다시 그리지 않게)
-                args: { ...who, weeks, today: kstToday(now),
+                args: {
+                    ...who,
+                    weeks,
+                    today: kstToday(now),
                     events: events.filter(ev => ev.date <= last && (ev.end || ev.date) >= first),
-                    holidays: [...holidays].filter(d => d >= first && d <= last).sort() },
-                draw: 'renderCalendar', fresh: 60,
+                    holidays: [...holidays].filter(d => d >= first && d <= last).sort(),
+                },
+                draw: 'renderCalendar',
+                fresh: 60,
             };
         },
     },
@@ -62,8 +75,12 @@ async function badge(q) {
         const now = Date.now();
         const week = memberWeek(await starSchedule(), q.get('id'), now);
         const args = { ...week, footer: config.schedule?.footer, today: kstToday(now) };
-        return { base: `member/${encodeURIComponent(week.soopId)}/schedule`, args, fresh: 60,
-            render: async () => (await loadRenderer()).renderSchedule(args) };
+        return {
+            base: `member/${encodeURIComponent(week.soopId)}/schedule`,
+            args,
+            fresh: 60,
+            render: async () => (await loadRenderer()).renderSchedule(args),
+        };
     }
     const make = Object.hasOwn(BADGES, t) && Object.hasOwn(BADGES[t], b) && BADGES[t][b];
     if (!make) throw Object.assign(new Error('없는 뱃지입니다'), { status: 404 });
@@ -75,7 +92,11 @@ export default async function handler(req, res) {
     const q = query(req);
     try {
         const { base, args, render, fresh } = await badge(q);
-        const key = crypto.createHash('sha256').update(BUILD + base + JSON.stringify(args)).digest('hex').slice(0, 12);
+        const key = crypto
+            .createHash('sha256')
+            .update(BUILD + base + JSON.stringify(args))
+            .digest('hex')
+            .slice(0, 12);
         const v = q.get('v');
         if (v !== key) {
             // 고정 주소이거나 지난 해시: 지금 그림으로 보낸다.
@@ -83,13 +104,23 @@ export default async function handler(req, res) {
             const target = `/${base}.${key}.png`;
             res.statusCode = 302;
             res.setHeader('Location', target);
-            res.setHeader('Cache-Control', v ? 'public, max-age=0, s-maxage=10' : `public, max-age=0, s-maxage=${fresh}, stale-while-revalidate=600, stale-if-error=86400`);
+            res.setHeader(
+                'Cache-Control',
+                v
+                    ? 'public, max-age=0, s-maxage=10'
+                    : `public, max-age=0, s-maxage=${fresh}, stale-while-revalidate=600, stale-if-error=86400`
+            );
             res.end();
             // 내용이 바뀌었으면 다음 사람이 보기 전에 새 그림을 미리 그려 CDN에 넣어 둔다
             const host = req.headers['x-forwarded-host'] || req.headers.host;
             if (!v && process.env.VERCEL && host && prewarmed.get(base) !== key) {
                 prewarmed.set(base, key);
-                waitUntil(fetch(`https://${host}${target}`).then(r => r.arrayBuffer(), () => null));
+                waitUntil(
+                    fetch(`https://${host}${target}`).then(
+                        r => r.arrayBuffer(),
+                        () => null
+                    )
+                );
             }
             return;
         }

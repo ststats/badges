@@ -23,25 +23,45 @@ export function sharedNoticeHandler({ secret, currentCookie, fetcher = fetch }) 
                     url.searchParams.set('page', String(page));
                     url.searchParams.set('perPage', '10');
                     const response = await fetcher(url, {
-                        headers: { Cookie: cookie, Referer: `https://www.sooplive.co.kr/station/${id}/board`, 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' },
-                        redirect: 'error', signal: AbortSignal.timeout(8000),
+                        headers: {
+                            Cookie: cookie,
+                            Referer: `https://www.sooplive.co.kr/station/${id}/board`,
+                            'User-Agent': 'Mozilla/5.0',
+                            Accept: 'application/json',
+                        },
+                        redirect: 'error',
+                        signal: AbortSignal.timeout(8000),
                     });
                     if (!response.ok) continue;
                     const board = await response.json();
                     if (!Array.isArray(board?.contents)) continue;
                     const posts = recentOwnPosts(board, id, Infinity).map(p => ({
-                        titleNo: p.titleNo, titleName: p.titleName ?? null, regDate: p.regDate ?? null,
-                        userId: p.userId ?? null, userNick: p.userNick ?? null,
-                        content: p.content ? { textContent: p.content.textContent ?? '', content: p.content.content ?? '' } : null,
+                        titleNo: p.titleNo,
+                        titleName: p.titleName ?? null,
+                        regDate: p.regDate ?? null,
+                        userId: p.userId ?? null,
+                        userNick: p.userNick ?? null,
+                        content: p.content
+                            ? { textContent: p.content.textContent ?? '', content: p.content.content ?? '' }
+                            : null,
                         display: p.display ? { bbsName: p.display.bbsName ?? '' } : null,
                         count: p.count ? { likeCnt: p.count.likeCnt ?? 0, readCnt: p.count.readCnt ?? 0 } : null,
-                        photos: Array.isArray(p.photos) ? p.photos.map(x => ({ url: x?.url ?? '' })).filter(x => x.url) : [],
+                        photos: Array.isArray(p.photos)
+                            ? p.photos.map(x => ({ url: x?.url ?? '' })).filter(x => x.url)
+                            : [],
                     }));
                     const total = Number(board.meta?.totalPages);
-                    return sendJson(res, 200, { posts, totalPages: Number.isSafeInteger(total) && total > 0 ? total : 1 });
-                } catch { /* never include cookie or upstream errors */ }
+                    return sendJson(res, 200, {
+                        posts,
+                        totalPages: Number.isSafeInteger(total) && total > 0 ? total : 1,
+                    });
+                } catch {
+                    /* never include cookie or upstream errors */
+                }
             }
-        } catch { /* generic failure only */ }
+        } catch {
+            /* generic failure only */
+        }
         return sendJson(res, 502, { error: 'Notice source unavailable' });
     };
 }

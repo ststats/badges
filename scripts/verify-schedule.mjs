@@ -13,7 +13,13 @@ assert.equal(membersResponse.status, 200);
 const members = await membersResponse.json();
 assert.ok(members.some(m => m.soopId === 'soju2022'));
 assert.ok(members.some(m => m.soopId === 'minchul'));
-for (const route of ['soju/schedule.png', 'member/soju2022/schedule.png', 'member/minchul/schedule.png', 'staruniv/today.png', 'staruniv/calendar.png']) {
+for (const route of [
+    'soju/schedule.png',
+    'member/soju2022/schedule.png',
+    'member/minchul/schedule.png',
+    'staruniv/today.png',
+    'staruniv/calendar.png',
+]) {
     const response = await fetch(`${base}/${route}`);
     assert.equal(response.status, 200, route);
     assert.match(response.headers.get('content-type'), /image\/png/);
@@ -21,7 +27,10 @@ for (const route of ['soju/schedule.png', 'member/soju2022/schedule.png', 'membe
     const meta = await sharp(image).metadata();
     assert.equal(meta.width, 900, route);
     assert.ok(meta.height > 0);
-    if (dest) { await fs.mkdir(dest, { recursive: true }); await fs.writeFile(path.join(dest, route.replaceAll('/', '-')), image); }
+    if (dest) {
+        await fs.mkdir(dest, { recursive: true });
+        await fs.writeFile(path.join(dest, route.replaceAll('/', '-')), image);
+    }
     console.log(`${route}: ${meta.width}×${meta.height}`);
 }
 assert.equal((await fetch(`${base}/member/unknown-member/schedule.png`)).status, 404);
@@ -30,7 +39,10 @@ for (const route of ['/edit', '/edit/']) {
     assert.ok([302, 307, 308].includes(response.status));
     assert.equal(response.headers.get('location'), 'https://staruniv.vercel.app/schedule/');
 }
-const browser = await chromium.launch({ headless: true, ...(process.env.CHROME ? { executablePath: process.env.CHROME } : { channel: 'chrome' }) });
+const browser = await chromium.launch({
+    headless: true,
+    ...(process.env.CHROME ? { executablePath: process.env.CHROME } : { channel: 'chrome' }),
+});
 try {
     const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
     const page = await context.newPage();
@@ -38,10 +50,16 @@ try {
     page.on('pageerror', e => errors.push(e.message));
     await page.goto(base);
     await page.waitForFunction(() => !document.getElementById('member-select').disabled);
-    for (const [id, name] of [['minchul', '김민철'], ['soju2022', '소주양']]) {
+    for (const [id, name] of [
+        ['minchul', '김민철'],
+        ['soju2022', '소주양'],
+    ]) {
         await page.selectOption('#member-select', id);
         assert.equal(await page.locator('[data-key="soju"] h2').textContent(), name);
-        assert.equal(await page.locator('[data-key="soju"] .shot img').getAttribute('src'), `/member/${id}/schedule.png`);
+        assert.equal(
+            await page.locator('[data-key="soju"] .shot img').getAttribute('src'),
+            `/member/${id}/schedule.png`
+        );
         await page.locator('[data-key="soju"] [data-copy="code"]').click();
         const copied = await page.evaluate(() => navigator.clipboard.readText());
         assert.ok(copied.includes(`${base}/member/${id}/schedule.png`));

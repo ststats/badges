@@ -12,13 +12,31 @@ const subjects = [
 export async function verifyActionsIdentity(token, jwks = keys) {
     if (typeof token !== 'string' || token.length > 20000) throw new Error('Invalid identity');
     const { payload } = await jwtVerify(token, jwks, {
-        issuer: ISSUER, audience: AUDIENCE, algorithms: ['RS256'],
-        maxTokenAge: '10m', clockTolerance: 5,
-        requiredClaims: ['exp', 'iat', 'nbf', 'sub', 'repository_id', 'repository_owner_id', 'ref', 'workflow_ref', 'event_name'],
+        issuer: ISSUER,
+        audience: AUDIENCE,
+        algorithms: ['RS256'],
+        maxTokenAge: '10m',
+        clockTolerance: 5,
+        requiredClaims: [
+            'exp',
+            'iat',
+            'nbf',
+            'sub',
+            'repository_id',
+            'repository_owner_id',
+            'ref',
+            'workflow_ref',
+            'event_name',
+        ],
     });
-    if (!subjects.includes(payload.sub) || payload.repository_id !== '1413985650' || payload.repository_owner_id !== '322625611'
-        || payload.ref !== 'refs/heads/main'
-        || payload.workflow_ref !== 'ststats/badges/.github/workflows/autopost.yml@refs/heads/main'
-        || payload.event_name !== 'workflow_dispatch') throw new Error('Untrusted workflow');
+    if (
+        !subjects.includes(payload.sub) ||
+        payload.repository_id !== '1413985650' ||
+        payload.repository_owner_id !== '322625611' ||
+        payload.ref !== 'refs/heads/main' ||
+        payload.workflow_ref !== 'ststats/badges/.github/workflows/autopost.yml@refs/heads/main' ||
+        payload.event_name !== 'workflow_dispatch'
+    )
+        throw new Error('Untrusted workflow');
     return payload;
 }

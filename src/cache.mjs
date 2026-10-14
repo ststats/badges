@@ -19,9 +19,13 @@ export function keepFresh(load, { ms = 30000, fallbackMs = 6 * 3600 * 1000, labe
         );
         request = mine;
         at = Date.now();
-        mine.catch(() => { if (request === mine) request = null; });
+        mine.catch(() => {
+            if (request === mine) request = null;
+        });
         return mine;
     };
-    get.forget = () => { request = null; };
+    get.forget = () => {
+        request = null;
+    };
     return get;
 }

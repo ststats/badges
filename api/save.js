@@ -11,15 +11,23 @@ const httpError = (status, message) => Object.assign(new Error(message), { statu
 function checkPassword(given) {
     const want = process.env.EDIT_PASSWORD || '';
     if (want.length < 4) throw httpError(500, 'Vercel 환경 변수 EDIT_PASSWORD(4자 이상)가 없습니다');
-    const hash = s => crypto.createHash('sha256').update(String(s ?? '')).digest();
+    const hash = s =>
+        crypto
+            .createHash('sha256')
+            .update(String(s ?? ''))
+            .digest();
     return crypto.timingSafeEqual(hash(given), hash(want));
 }
 
 async function saveCookie({ cookie }) {
     if (!cookieKeyReady()) throw httpError(500, 'Vercel 환경 변수 COOKIE_KEY(16자 이상)가 없습니다');
     // 크롬에서 복사할 때 딸려 오는 'cookie:' 머리말과 줄바꿈은 뗀다
-    cookie = String(cookie || '').replace(/^\s*cookie\s*:\s*/i, '').replace(/[\r\n]+/g, '').trim();
-    if (cookie.length < 20 || !cookie.includes('=')) throw httpError(400, '쿠키 값이 아닌 것 같아요. Request Headers의 cookie 값 전체를 붙여 넣어 주세요.');
+    cookie = String(cookie || '')
+        .replace(/^\s*cookie\s*:\s*/i, '')
+        .replace(/[\r\n]+/g, '')
+        .trim();
+    if (cookie.length < 20 || !cookie.includes('='))
+        throw httpError(400, '쿠키 값이 아닌 것 같아요. Request Headers의 cookie 값 전체를 붙여 넣어 주세요.');
     let extraCount;
     try {
         extraCount = await checkCookie(cookie);

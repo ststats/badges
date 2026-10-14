@@ -14,8 +14,17 @@ export function starEvents(rows, members = []) {
             const text = String(r.title || '').trim();
             const subject = String(r.person || '').trim();
             const owner = r.subject_type === 'person' ? resolveMember(members, subject) : null;
-            const event = { date: r.start_date, end: r.end_date || r.start_date, time, who: owner?.['이름'] || subject, text, color: r.color || '', order,
-                subjectType: r.subject_type || 'other', participants: eventMembers(r, members) };
+            const event = {
+                date: r.start_date,
+                end: r.end_date || r.start_date,
+                time,
+                who: owner?.['이름'] || subject,
+                text,
+                color: r.color || '',
+                order,
+                subjectType: r.subject_type || 'other',
+                participants: eventMembers(r, members),
+            };
             return { ...event, subjectLabel: subjectLabel(event, members) };
         });
 }
@@ -24,11 +33,12 @@ export function starEvents(rows, members = []) {
 export function starOffAir(rows, members) {
     const names = new Map((members || []).map(m => [String(m['SOOP ID']), m['이름']]));
     const byDate = {};
-    for (const r of rows || []) if (r?.off_date && r.soop_id != null) {
-        const id = String(r.soop_id);
-        const day = (byDate[r.off_date] ||= []);
-        if (!day.some(m => m.soopId === id)) day.push({ soopId: id, name: names.get(id) || id });
-    }
+    for (const r of rows || [])
+        if (r?.off_date && r.soop_id != null) {
+            const id = String(r.soop_id);
+            const day = (byDate[r.off_date] ||= []);
+            if (!day.some(m => m.soopId === id)) day.push({ soopId: id, name: names.get(id) || id });
+        }
     return byDate;
 }
 
@@ -54,7 +64,9 @@ export const starSchedule = keepFresh(
 export const starLogo = keepFresh(
     async () => {
         const [row] = (await rpc('api_university_logos', { p_names: [config.staruniv.name] })) || [];
-        return row?.path ? `${config.supabase.url}/storage/v1/object/public/staruniv-media/${row.path.split('/').map(encodeURIComponent).join('/')}` : null;
+        return row?.path
+            ? `${config.supabase.url}/storage/v1/object/public/staruniv-media/${row.path.split('/').map(encodeURIComponent).join('/')}`
+            : null;
     },
     { ms: 10 * 60 * 1000, label: '팀 로고' }
 );

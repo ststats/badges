@@ -1,6 +1,9 @@
 import { eventsOn, weekDates } from './lib.mjs';
 
-const idOf = value => String(value ?? '').trim().toLowerCase();
+const idOf = value =>
+    String(value ?? '')
+        .trim()
+        .toLowerCase();
 
 // 멤버 찾기: SOOP ID가 있으면 그것만 믿는다. 이름(사이트가 쓰는 두 글자 줄임 포함)은
 // 딱 한 명만 맞을 때만 그 멤버로 본다.
@@ -20,7 +23,8 @@ export function eventMembers(row, members) {
     return (Array.isArray(row.participants) ? row.participants : []).flatMap(p => {
         if (!p || typeof p !== 'object') return [];
         const member = resolveMember(members, p.name, p.soop_id);
-        const entry = member ? { soop_id: String(member['SOOP ID']), name: member['이름'] }
+        const entry = member
+            ? { soop_id: String(member['SOOP ID']), name: member['이름'] }
             : { ...(p.soop_id != null ? { soop_id: String(p.soop_id) } : {}), name: String(p.name || p.soop_id || '') };
         const key = idOf(entry.soop_id || entry.name);
         if (!key || seen.has(key)) return [];
@@ -34,11 +38,16 @@ export function memberWeek(data, soopId, now) {
     const member = resolveMember(data.members, '', soopId);
     if (!member) throw Object.assign(new Error('등록되지 않은 멤버입니다'), { status: 404 });
     const id = idOf(member['SOOP ID']);
-    const events = data.events.filter(ev => ev.participants.some(p => idOf(p.soop_id) === id)
-        || (ev.subjectType === 'person' && idOf(resolveMember(data.members, ev.who)?.['SOOP ID']) === id));
+    const events = data.events.filter(
+        ev =>
+            ev.participants.some(p => idOf(p.soop_id) === id) ||
+            (ev.subjectType === 'person' && idOf(resolveMember(data.members, ev.who)?.['SOOP ID']) === id)
+    );
     return {
-        name: member['이름'], soopId: String(member['SOOP ID']),
-        days: weekDates(now).map(date => ({ date,
+        name: member['이름'],
+        soopId: String(member['SOOP ID']),
+        days: weekDates(now).map(date => ({
+            date,
             offAir: (data.offAir[date] || []).some(p => idOf(p.soopId) === id),
             events: eventsOn(events, date),
         })),
@@ -51,9 +60,11 @@ export function subjectLabel(event, members) {
     const subject = owner ? String(owner['이름']).slice(-2) : event.who;
     if (!event.participants.length) return subject;
     if (event.subjectType === 'person') {
-        const hasOwner = event.participants.some(p => owner && p.soop_id
-            ? idOf(p.soop_id) === idOf(owner['SOOP ID'])
-            : (resolveMember(members, p.name, p.soop_id)?.['이름']?.slice(-2) || p.name) === subject);
+        const hasOwner = event.participants.some(p =>
+            owner && p.soop_id
+                ? idOf(p.soop_id) === idOf(owner['SOOP ID'])
+                : (resolveMember(members, p.name, p.soop_id)?.['이름']?.slice(-2) || p.name) === subject
+        );
         const extras = event.participants.length - (hasOwner ? 1 : 0);
         return extras ? `${subject} 외 ${extras}인` : subject;
     }

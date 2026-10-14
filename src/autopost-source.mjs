@@ -1,7 +1,8 @@
 import { AUDIENCE } from './actions-identity.mjs';
 
 async function authorizedRequest(endpoint, body, env, fetcher) {
-    if (!env.ACTIONS_ID_TOKEN_REQUEST_URL || !env.ACTIONS_ID_TOKEN_REQUEST_TOKEN) throw new Error('GitHub OIDC is required');
+    if (!env.ACTIONS_ID_TOKEN_REQUEST_URL || !env.ACTIONS_ID_TOKEN_REQUEST_TOKEN)
+        throw new Error('GitHub OIDC is required');
     const url = new URL(env.ACTIONS_ID_TOKEN_REQUEST_URL);
     if (url.protocol !== 'https:') throw new Error('Invalid GitHub identity endpoint');
     url.searchParams.set('audience', AUDIENCE);
@@ -13,8 +14,10 @@ async function authorizedRequest(endpoint, body, env, fetcher) {
     const { value: token } = await identity.json();
     if (typeof token !== 'string' || !token) throw new Error('Missing GitHub identity');
     const response = await fetcher(`https://staruniv-badges.vercel.app/api/${endpoint}`, {
-        method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body), signal: AbortSignal.timeout(65000),
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(65000),
     });
     if (!response.ok) throw new Error(`Vercel autopost request failed (${response.status})`);
     return response.json();

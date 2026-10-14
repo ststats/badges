@@ -19,22 +19,33 @@ test('등록 성공과 실패 후 사이트 키 함수를 복원하고 옛 재�
         },
     };
     const page = {
-        on() {}, setDefaultTimeout() {}, async goto() {}, async waitForFunction() {},
+        on() {},
+        setDefaultTimeout() {},
+        async goto() {},
+        async waitForFunction() {},
         async evaluate(fn, args) {
             if (!args) return [{ text: '공지', href: `/board/${BOARD}?s_category=Cnotice` }];
             if (args.password) return 'SUCCESS';
             return vm.runInNewContext(`(${fn.toString()})(args)`, {
-                args, YG_BOARD: api, document: { querySelector: () => ({}) },
+                args,
+                YG_BOARD: api,
+                document: { querySelector: () => ({}) },
                 FormData: class extends Map {
-                    constructor() { super([['csrf_token', 'token']]); }
-                    append(key, value) { this.set(key, value); }
+                    constructor() {
+                        super([['csrf_token', 'token']]);
+                    }
+                    append(key, value) {
+                        this.set(key, value);
+                    }
                 },
             });
         },
     };
     const browser = { newContext: async () => ({ newPage: async () => page, close: async () => {} }) };
     const publisher = await ygosuPublisher(browser, {
-        id: 'test', password: 'test', postingKeys: { '123': 'a'.repeat(64) },
+        id: 'test',
+        password: 'test',
+        postingKeys: { '123': 'a'.repeat(64) },
     });
     const post = { titleNo: 123, regDate: '2026-10-12 12:00:00' };
     const uploads = [{ fileUrl: 'https://storage2.ygosu.com/?code=Stest', code: 'Stest', part: '1/1' }];
@@ -45,5 +56,7 @@ test('등록 성공과 실패 후 사이트 키 함수를 복원하고 옛 재�
         await assert.rejects(publisher.publish(post, uploads), /YGOSU_WRITE_HTTP_0_UNCLASSIFIED/);
         assert.equal(api.createV3ArticleIdempotencyKey, originalKey);
         assert.deepEqual(keys, [postingKey(123), postingKey(123)]);
-    } finally { await publisher.close(); }
+    } finally {
+        await publisher.close();
+    }
 });

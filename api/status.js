@@ -10,7 +10,8 @@ import { head, topbar } from '../src/shell.mjs';
 const FIX = '아래 "SOOP 쿠키 바꾸기"에서 새 쿠키를 넣으세요.';
 const MESSAGES = {
     none: '쿠키 없음: 공지 자동 등록에 필요한 로그인 쿠키를 아래 "SOOP 쿠키 바꾸기"에서 넣으세요.',
-    error: e => `쿠키로 게시판을 읽지 못했습니다(${e}). 만료됐거나 잘못 복사된 것 같습니다. ${FIX} 공지 자동 등록은 공개 글로 대체하지 않고 중단합니다.`,
+    error: e =>
+        `쿠키로 게시판을 읽지 못했습니다(${e}). 만료됐거나 잘못 복사된 것 같습니다. ${FIX} 공지 자동 등록은 공개 글로 대체하지 않고 중단합니다.`,
     ok: n => `쿠키로 즐겨찾기 전용 글까지 받고 있습니다. 최근 글 중 공개 목록에 없는 글 ${n}개.`,
     stale: '쿠키는 들어 있지만 최근 글 20개 중 즐겨찾기 전용 글이 없습니다(지금 없거나, 쿠키가 로그인 상태가 아닐 수 있습니다).',
 };
@@ -25,17 +26,29 @@ export default async function handler(req, res) {
         ({ posts } = st);
         extraCount = st.extra.length;
         state = !st.hasCookie ? 'none' : st.error ? 'error' : extraCount ? 'ok' : 'stale';
-        text = state === 'error' ? MESSAGES.error(escapeHTML(st.error)) : state === 'ok' ? MESSAGES.ok(extraCount) : MESSAGES[state];
+        text =
+            state === 'error'
+                ? MESSAGES.error(escapeHTML(st.error))
+                : state === 'ok'
+                  ? MESSAGES.ok(extraCount)
+                  : MESSAGES[state];
     } catch (e) {
         text = `게시판을 읽지 못했습니다: ${escapeHTML(e.message)}`;
     }
     if (query(req).get('format') === 'json')
-        return sendJson(res, 200, { state, extraCount, posts: posts.map(p => ({ title: p.titleName, date: p.regDate })) });
+        return sendJson(res, 200, {
+            state,
+            extraCount,
+            posts: posts.map(p => ({ title: p.titleName, date: p.regDate })),
+        });
     res.statusCode = 200;
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Robots-Tag', 'noindex');
-    const pill = { ok: ['ok', '쿠키 정상'], none: ['', '쿠키 없음'], unknown: ['', '확인 못 함'] }[state] || ['warn', '쿠키 확인 필요'];
+    const pill = { ok: ['ok', '쿠키 정상'], none: ['', '쿠키 없음'], unknown: ['', '확인 못 함'] }[state] || [
+        'warn',
+        '쿠키 확인 필요',
+    ];
     res.end(`<!doctype html><html lang="ko"><head>${head(`${config.name} 뱃지 상태`)}
 <style>.st { padding: 18px 20px; margin-top: 18px; line-height: 1.7; color: var(--body); }
 .st .pill { margin-bottom: 8px; }

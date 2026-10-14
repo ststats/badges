@@ -11,16 +11,32 @@ import members from '../api/members.js';
 const vercel = JSON.parse(await fs.readFile(path.join(root, 'vercel.json'), 'utf-8'));
 const handlers = { '/api/img': img, '/api/status': status, '/api/save': save, '/api/members': members };
 const toRegex = src =>
-    new RegExp('^' + src.replace(/[.]/g, '\\.').replace(/:(\w+)\(([^)]+)\)/g, '(?<$1>$2)').replace(/:(\w+)/g, '(?<$1>[^/]+)') + '$');
-const types = { '.html': 'text/html; charset=utf-8', '.mjs': 'text/javascript', '.json': 'application/json', '.css': 'text/css' };
+    new RegExp(
+        '^' +
+            src
+                .replace(/[.]/g, '\\.')
+                .replace(/:(\w+)\(([^)]+)\)/g, '(?<$1>$2)')
+                .replace(/:(\w+)/g, '(?<$1>[^/]+)') +
+            '$'
+    );
+const types = {
+    '.html': 'text/html; charset=utf-8',
+    '.mjs': 'text/javascript',
+    '.json': 'application/json',
+    '.css': 'text/css',
+};
 
 http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
-    for (const r of vercel.redirects) if (toRegex(r.source).test(url.pathname)) return res.writeHead(307, { Location: r.destination }).end();
+    for (const r of vercel.redirects)
+        if (toRegex(r.source).test(url.pathname)) return res.writeHead(307, { Location: r.destination }).end();
     for (const r of vercel.rewrites) {
         const m = toRegex(r.source).exec(url.pathname);
         if (!m) continue;
-        const dest = new URL(r.destination.replace(/:(\w+)/g, (_, k) => m.groups[k]), 'http://localhost');
+        const dest = new URL(
+            r.destination.replace(/:(\w+)/g, (_, k) => m.groups[k]),
+            'http://localhost'
+        );
         req.url = dest.pathname + dest.search;
         return handlers[dest.pathname](req, res);
     }
@@ -29,7 +45,9 @@ http.createServer(async (req, res) => {
     if (!file.startsWith(path.join(root, 'public'))) return res.writeHead(403).end();
     try {
         if ((await fs.stat(file)).isDirectory()) file = path.join(file, 'index.html');
-        res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream' }).end(await fs.readFile(file));
+        res.writeHead(200, { 'Content-Type': types[path.extname(file)] || 'application/octet-stream' }).end(
+            await fs.readFile(file)
+        );
     } catch {
         res.writeHead(404).end();
     }

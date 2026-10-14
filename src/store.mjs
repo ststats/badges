@@ -15,7 +15,11 @@ export async function rpc(fn, args) {
         signal: AbortSignal.timeout(8000),
     });
     const body = await res.json().catch(() => null);
-    if (!res.ok) throw Object.assign(new Error(body?.message || `Supabase ${res.status}`), { code: body?.code, status: res.status });
+    if (!res.ok)
+        throw Object.assign(new Error(body?.message || `Supabase ${res.status}`), {
+            code: body?.code,
+            status: res.status,
+        });
     return body;
 }
 
@@ -24,7 +28,8 @@ export async function getCookieCipher() {
     if (memo && Date.now() - memo.at < MEMO_MS) return memo.value;
     let value;
     try {
-        value = (await rpc('badge_get_secret', { p_secret: process.env.BADGE_WRITE_SECRET || '' }))?.[0]?.content ?? null;
+        value =
+            (await rpc('badge_get_secret', { p_secret: process.env.BADGE_WRITE_SECRET || '' }))?.[0]?.content ?? null;
         lastGood = value;
     } catch (e) {
         console.error('badge_get_secret 실패:', e.message);
@@ -42,8 +47,15 @@ export async function putCookieCipher(content) {
         memo = { at: Date.now(), value: content };
         lastGood = content;
     } catch (e) {
-        if (e.code === '42501') throw Object.assign(new Error('BADGE_WRITE_SECRET이 Supabase Vault의 badge_write_secret과 다릅니다'), { status: 500 });
-        if (e.code === 'PGRST202' || e.status === 404) throw Object.assign(new Error('Supabase에 badge_put 함수가 없습니다. supabase/badges.sql을 실행해 주세요'), { status: 500 });
+        if (e.code === '42501')
+            throw Object.assign(new Error('BADGE_WRITE_SECRET이 Supabase Vault의 badge_write_secret과 다릅니다'), {
+                status: 500,
+            });
+        if (e.code === 'PGRST202' || e.status === 404)
+            throw Object.assign(
+                new Error('Supabase에 badge_put 함수가 없습니다. supabase/badges.sql을 실행해 주세요'),
+                { status: 500 }
+            );
         throw Object.assign(new Error(`Supabase 저장 실패: ${e.message}`), { status: 502 });
     }
 }

@@ -9,7 +9,9 @@ export default async function handler(req, res) {
     try {
         const bearer = /^Bearer (\S+)$/.exec(String(req.headers.authorization || ''))?.[1];
         await verifyActionsIdentity(bearer);
-    } catch { return sendJson(res, 401, { error: 'GitHub Actions identity required' }); }
+    } catch {
+        return sendJson(res, 401, { error: 'GitHub Actions identity required' });
+    }
     try {
         // 쿠키/복호화 키는 Vercel 안에만 남는다. 오류 시 공개 목록으로 대체하지 않는다.
         const cookie = await currentCookie();

@@ -6,7 +6,11 @@ import { keepFresh } from './cache.mjs';
 import { getCookieCipher } from './store.mjs';
 
 // ----- 쿠키: 상태 화면에서 저장한 암호문(badge_files의 cookie)을 COOKIE_KEY로 푼다 -----
-const cookieCipherKey = () => crypto.createHash('sha256').update(process.env.COOKIE_KEY || '').digest();
+const cookieCipherKey = () =>
+    crypto
+        .createHash('sha256')
+        .update(process.env.COOKIE_KEY || '')
+        .digest();
 export const cookieKeyReady = () => (process.env.COOKIE_KEY || '').length >= 16;
 
 export function encryptCookie(cookie) {
@@ -40,7 +44,11 @@ export async function currentCookie() {
 async function fetchBoard(cookie) {
     const get = async host => {
         const headers = cookie
-            ? { Cookie: cookie, Referer: `https://www.sooplive.co.kr/station/${config.soopId}/board`, 'User-Agent': 'Mozilla/5.0' }
+            ? {
+                  Cookie: cookie,
+                  Referer: `https://www.sooplive.co.kr/station/${config.soopId}/board`,
+                  'User-Agent': 'Mozilla/5.0',
+              }
             : {};
         const res = await fetch(boardApiUrl(config.soopId, host), { headers, signal: AbortSignal.timeout(8000) });
         if (!res.ok) throw new Error(`SOOP 게시판 HTTP ${res.status}`);
@@ -80,7 +88,10 @@ const boards = {
 };
 
 // 새 쿠키를 저장한 뒤 바로 반영되게 기억을 지운다
-export const forgetBoards = () => { boards.public.forget(); boards.mine.forget(); };
+export const forgetBoards = () => {
+    boards.public.forget();
+    boards.mine.forget();
+};
 
 const extraPosts = (mine, pub) => {
     const pubIds = new Set(pub.map(p => p.titleNo));
