@@ -38,7 +38,7 @@ export async function putCookieCipher(content) {
     const secret = process.env.BADGE_WRITE_SECRET;
     if (!secret) throw Object.assign(new Error('Vercel 환경 변수 BADGE_WRITE_SECRET이 없습니다'), { status: 500 });
     try {
-        await rpc('badge_put', { p_name: 'cookie', p_content: content, p_secret: secret });
+        await rpc('badge_put', { p_content: content, p_secret: secret });
         memo = { at: Date.now(), value: content };
         lastGood = content;
     } catch (e) {
