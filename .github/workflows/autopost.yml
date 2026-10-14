@@ -1,0 +1,57 @@
+name: 소주양 공지 자동 등록
+
+on:
+  workflow_dispatch:
+    inputs:
+      delivery_lease:
+        description: '감지기가 발급한 실행 번호 (수동 실행은 비워 둠)'
+        type: string
+        default: ''
+      delivery_title:
+        description: '감지한 SOOP 글 번호 (수동 실행은 비워 둠)'
+        type: string
+        default: ''
+      recover_pending:
+        description: '미확정 한 건 복구: 해당 SOOP 글 번호를 정확히 입력 (같은 멱등키 사용)'
+        type: string
+        default: ''
+      diagnose_only:
+        description: '글을 보내지 않고 로그인·글쓰기 인증만 확인'
+        type: boolean
+        default: false
+      publish_latest:
+        description: '최신 공지 하나 등록 테스트 (이미 등록한 글은 재등록하지 않음)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: soju-ygosu-autopost
+  cancel-in-progress: false
+
+jobs:
+  post:
+    if: vars.AUTOPOST_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: node scripts/autopost.mjs
+        env:
+          DELIVERY_LEASE: ${{ inputs.delivery_lease }}
+          DELIVERY_TITLE: ${{ inputs.delivery_title }}
+          GITHUB_TOKEN: ${{ github.token }}
+          PUBLISH_LATEST: ${{ inputs.publish_latest }}
+          DIAGNOSE_ONLY: ${{ inputs.diagnose_only }}
+          RECOVER_PENDING: ${{ inputs.recover_pending }}
+          YGOSU_ID: ${{ secrets.YGOSU_ID }}
+          YGOSU_PASSWORD: ${{ secrets.YGOSU_PASSWORD }}
