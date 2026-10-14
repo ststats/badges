@@ -124,7 +124,7 @@ fetch('/api/members').then(async r => {
         g.badges[0].img = `member/${encodeURIComponent(m.soopId)}/schedule.png`;
         g.badges[0].link = `https://www.sooplive.co.kr/station/${encodeURIComponent(m.soopId)}`;
         renderGroups();
-        loadDecorations();
+        applyDecorations();
     };
     select.addEventListener('change', update);
     update();
@@ -151,18 +151,27 @@ document.addEventListener('click', async e => {
     }
 });
 
-function loadDecorations() {
-// 소주양: SOOP 쿠키 상태
-const pillOf = key => document.querySelector(`[data-key="${key}"] .pill`);
+// 꾸밈(소주양 쿠키 상태 알약 · 캄몬스타즈 로고)은 한 번만 받아 두고, 멤버를 바꿔 다시 그릴 때마다 붙인다
+const decorations = {};
+function applyDecorations() {
+    const st = decorations.status;
+    const pill = document.querySelector('[data-key="soju"] .pill');
+    if (pill && st?.state && st.state !== 'unknown' && GROUPS[0].name === config.name) {
+        pill.hidden = false;
+        pill.className = `pill ${st.state === 'ok' ? 'ok' : 'warn'}`;
+        pill.textContent = st.state === 'ok' ? '쿠키 정상' : st.state === 'none' ? '쿠키 없음' : '쿠키 확인 필요';
+        pill.title = '상태 화면에서 자세히 보고 쿠키를 바꿀 수 있어요';
+    }
+    const logo = document.querySelector('[data-key="staruniv"] .avatar');
+    if (logo && decorations.logo) {
+        logo.src = decorations.logo;
+        logo.hidden = false;
+    }
+}
 fetch('/status.json', { cache: 'no-store' }).then(r => (r.ok ? r.json() : null)).then(st => {
-    if (!st?.state || st.state === 'unknown' || GROUPS[0].name !== config.name) return;
-    const pill = pillOf('soju');
-    pill.hidden = false;
-    pill.className = `pill ${st.state === 'ok' ? 'ok' : 'warn'}`;
-    pill.textContent = st.state === 'ok' ? '쿠키 정상' : st.state === 'none' ? '쿠키 없음' : '쿠키 확인 필요';
-    pill.title = '상태 화면에서 자세히 보고 쿠키를 바꿀 수 있어요';
+    decorations.status = st;
+    applyDecorations();
 }).catch(() => {});
-
 // 캄몬스타즈: 스타유니브 '팀 로고'
 const { url, key } = config.supabase;
 fetch(`${url}/rest/v1/rpc/api_university_logos`, {
@@ -170,12 +179,9 @@ fetch(`${url}/rest/v1/rpc/api_university_logos`, {
     body: JSON.stringify({ p_names: [config.staruniv.name] }),
 }).then(r => r.json()).then(([row]) => {
     if (!row?.path) return;
-    const img = document.querySelector('[data-key="staruniv"] .avatar');
-    img.src = `${url}/storage/v1/object/public/staruniv-media/${row.path.split('/').map(encodeURIComponent).join('/')}`;
-    img.hidden = false;
+    decorations.logo = `${url}/storage/v1/object/public/staruniv-media/${row.path.split('/').map(encodeURIComponent).join('/')}`;
+    applyDecorations();
 }).catch(() => {});
-}
-loadDecorations();
 </script>
 </body>
 </html>

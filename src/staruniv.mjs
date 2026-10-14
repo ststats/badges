@@ -5,17 +5,13 @@ import { keepFresh } from './cache.mjs';
 import { rpc } from './store.mjs';
 import { eventMembers, resolveMember, subjectLabel } from './member-schedule.mjs';
 
-const TIME_RE = /^\d{1,2}:\d{2}$/;
-
-// 사이트 일정 행 → 뱃지 일정 {date, end, time, who, text, color, order}
-// 시간 칸에 '비방연습'처럼 글이 들어 있고 내용이 없으면 그 글을 내용으로 쓴다.
+// 사이트 일정 행 → 뱃지 일정 {date, end, time, who, text, color, order, subjectType, participants, subjectLabel}
 export function starEvents(rows, members = []) {
     return (rows || [])
         .filter(r => r?.start_date)
         .map((r, order) => {
-            let time = String(r.event_time || '').trim();
-            let text = String(r.title || r.description || '').trim();
-            if (!text && time && !TIME_RE.test(time) && time !== '시간미정') [text, time] = [time, ''];
+            const time = String(r.event_time || '').trim();
+            const text = String(r.title || '').trim();
             const subject = String(r.person || '').trim();
             const owner = r.subject_type === 'person' ? resolveMember(members, subject) : null;
             const event = { date: r.start_date, end: r.end_date || r.start_date, time, who: owner?.['이름'] || subject, text, color: r.color || '', order,
@@ -43,10 +39,11 @@ export const starSchedule = keepFresh(
             rpc('api_holidays', {}).catch(() => ({})),
             rpc('api_site_members', {}),
         ]);
+        const list = members?.members || [];
         return {
-            members: members.members || [],
-            events: starEvents(schedule?.events, members.members),
-            offAir: starOffAir(schedule?.offAir, members?.members),
+            members: list,
+            events: starEvents(schedule?.events, list),
+            offAir: starOffAir(schedule?.offAir, list),
             holidays: new Set(Object.keys(holidays || {}).filter(d => holidays[d])),
         };
     },

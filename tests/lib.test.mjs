@@ -37,8 +37,8 @@ test('여러 날 일정은 걸친 날마다, 이번 달 달력은 일요일부�
 
 test('스타유니브 일정 행을 뱃지 일정으로', () => {
     const [a, b] = starEvents([
-        { start_date: '2026-10-13', end_date: '2026-10-14', event_time: '비방연습', person: '캄몬', description: null, color: 'orange' },
-        { start_date: '2026-10-15', end_date: '2026-10-15', event_time: '시간미정', person: '캄몬', description: '캄몬 VS 드림즈', color: 'blue' },
+        { start_date: '2026-10-13', end_date: '2026-10-14', event_time: null, person: '캄몬', title: '비방연습', color: 'orange' },
+        { start_date: '2026-10-15', end_date: '2026-10-15', event_time: '시간미정', person: '캄몬', title: '캄몬 VS 드림즈', color: 'blue' },
     ]);
     assert.deepEqual(a, { date: '2026-10-13', end: '2026-10-14', time: '', who: '캄몬', text: '비방연습', color: 'orange', order: 0, subjectType: 'other', participants: [], subjectLabel: '캄몬' });
     assert.equal(b.time, '시간미정');

@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import { config } from './config.mjs';
 import { boardApiUrl, recentOwnPosts } from './lib.mjs';
 import { keepFresh } from './cache.mjs';
-import { getFile } from './store.mjs';
+import { getCookieCipher } from './store.mjs';
 
 // ----- 쿠키: 상태 화면에서 저장한 암호문(badge_files의 cookie)을 COOKIE_KEY로 푼다 -----
 const cookieCipherKey = () => crypto.createHash('sha256').update(process.env.COOKIE_KEY || '').digest();
@@ -25,7 +25,7 @@ export function decryptCookie(text) {
 
 export async function currentCookie() {
     if (!cookieKeyReady()) return '';
-    const stored = (await getFile('cookie'))?.content;
+    const stored = await getCookieCipher();
     if (!stored) return '';
     try {
         return decryptCookie(stored);

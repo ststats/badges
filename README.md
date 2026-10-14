@@ -23,8 +23,9 @@
 - **모든 뱃지 PNG는 가로 900px**, 기존 배치를 비례 확대합니다. 공지 자동 등록 이미지도 900px입니다.
 - **일정의 단일 원천**: 스타유니브 Supabase 공개 함수 `api_schedule`·`api_site_members`·`api_holidays`를 조회합니다. 일정 사본은 저장하지 않습니다.
 - **멤버별 일정**: 첫 화면에서 멤버를 선택하면 `/member/<SOOP ID>/schedule.png` 주소와 복사 코드가 바뀝니다. 개인 주체 또는 등록 참가자 ID가 일치하는 일정과 해당 멤버 휴방만 표시합니다. 이름은 등록 ID로 매핑하고 역할은 표시하지 않습니다.
-- **이전 주소 호환**: `/soju/schedule.png`는 소주양의 스타유니브 일정을 표시합니다. `/edit`·`/edit/`는 스타유니브 일정 페이지로 이동합니다. 이전 일정 읽기·저장 API는 410을 반환합니다.
-- **저장소**: `badge_files`에는 암호화 쿠키만 저장합니다. 기존 설치는 `supabase/retire-schedule.sql`로 이전 일정 행과 공개 읽기 함수를 제거하고 일정 쓰기를 막습니다.
+- **이전 주소**: `/soju/schedule.png`는 소주양의 스타유니브 일정을 표시합니다. `/edit`·`/edit/`는 스타유니브 일정 페이지로 이동합니다.
+- **저장소**: `badge_files`에는 암호화 쿠키만 저장합니다(`supabase/badges.sql`, `src/store.mjs`).
+- **확인**: `npm test`, 배포 뒤 `node scripts/verify-schedule.mjs <주소>`(멤버 목록·일정 뱃지·첫 화면 멤버 선택).
 - **화면**: 뱃지 모음(`/`)과 쿠키 상태(`/status`)는 기존 공통 디자인을 사용합니다.
 
 ### Supabase(처음 한 번)

@@ -2,8 +2,8 @@ import { eventsOn, weekDates } from './lib.mjs';
 
 const idOf = value => String(value ?? '').trim().toLowerCase();
 
-// IDs are authoritative. Names (including the site's two-letter subject label)
-// are resolved only when exactly one registered member matches.
+// 멤버 찾기: SOOP ID가 있으면 그것만 믿는다. 이름(사이트가 쓰는 두 글자 줄임 포함)은
+// 딱 한 명만 맞을 때만 그 멤버로 본다.
 export function resolveMember(members, name, soopId) {
     if (soopId !== undefined && soopId !== null && String(soopId).trim())
         return members.find(m => idOf(m['SOOP ID']) === idOf(soopId));
@@ -14,6 +14,7 @@ export function resolveMember(members, name, soopId) {
     return short.length === 1 ? short[0] : undefined;
 }
 
+// 일정의 참가자 → [{soop_id?, name}]. 등록 멤버면 이름을 멤버 목록 것으로 맞추고 같은 사람은 한 번만.
 export function eventMembers(row, members) {
     const seen = new Set();
     return (Array.isArray(row.participants) ? row.participants : []).flatMap(p => {
@@ -28,6 +29,7 @@ export function eventMembers(row, members) {
     });
 }
 
+// 멤버 한 명의 이번 주: 그 멤버가 참가자이거나 개인 주체인 일정과 그 멤버의 휴방
 export function memberWeek(data, soopId, now) {
     const member = resolveMember(data.members, '', soopId);
     if (!member) throw Object.assign(new Error('등록되지 않은 멤버입니다'), { status: 404 });
@@ -43,7 +45,7 @@ export function memberWeek(data, soopId, now) {
     };
 }
 
-// Match the main calendar: personal subjects exclude themselves from the count.
+// 주체 옆 인원(스타유니브 달력 calSubjectLabel과 같은 규칙): 개인은 본인을 뺀 '외 N인', 단체·대회는 'N인'
 export function subjectLabel(event, members) {
     const owner = resolveMember(members, event.who);
     const subject = owner ? String(owner['이름']).slice(-2) : event.who;

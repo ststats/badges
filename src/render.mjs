@@ -1,4 +1,4 @@
-// 뱃지 그림: satori(요소 → SVG) + resvg(SVG → PNG). SVG 출력도 지원한다.
+// 뱃지 그림: satori(요소 → SVG) + resvg(SVG → PNG).
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import satori from 'satori';
@@ -140,7 +140,8 @@ async function loadAdditionalAsset(code, segment) {
     }).then(v => v || '');
 }
 
-const CARD_W = 780; // 모든 일정 뱃지의 공통 가로 폭
+const CARD_W = 780; // 모든 일정 뱃지의 공통 가로 폭(그리는 기준)
+const PNG_W = 900; // 내보내는 PNG 가로: 기준 폭으로 그린 뒤 비례 확대
 const cardOf = width => (...children) =>
     h(
         'div',
@@ -220,8 +221,8 @@ const eventLine = (ev, even) => {
                 `참가: ${ev.participants.map(p => p.name).join(' · ')}`)));
 };
 
-// 주간 일정. format: 'png'(뱃지) 또는 'svg'(벡터 출력)
-export async function renderSchedule({ name, soopId, theme, days, today, footer, format = 'png' }) {
+// 주간 일정
+export async function renderSchedule({ name, soopId, theme, days, today, footer }) {
     const who = await profile({ soopId, theme });
     const head = scheduleHead(who, { name, subtitle: '이번 주 방송 일정', range: `${mmdd(days[0].date)} – ${mmdd(days[6].date)}` });
     const rows = days.map(({ date, offAir, events }) => {
@@ -233,20 +234,19 @@ export async function renderSchedule({ name, soopId, theme, days, today, footer,
             h('div', { fontSize: 18, fontWeight: 800, lineHeight: 1.1, color: C.ink }, String(Number(date.slice(8, 10)))));
         const items = [
             offAir && h('div', { alignSelf: 'flex-start', alignItems: 'center', gap: 6, fontSize: 13.5, fontWeight: 700, color: C.sub, background: isToday ? '#fff' : C.tint, borderRadius: 999, padding: '5px 12px 5px 10px' }, img(MOON, 13, 13), '휴방'),
-            // 그날 시간이 있는 일정이 하나라도 있으면 시간 칸을 비워서라도 맞춘다
             ...events.map(ev => eventLine(ev)),
             !offAir && !events.length && h('div', { fontSize: 14, color: C.none }, '일정 없음'),
         ].filter(Boolean);
         return h('div', { alignItems: 'center', gap: 16, padding: '10px 12px', borderRadius: 16, marginTop: 2, background: isToday ? C.tint : 'transparent' },
             dayBox, h('div', { flex: 1, flexDirection: 'column', gap: 6 }, items));
     });
-    return out(format, card(head,
+    return png(card(head,
         h('div', { flexDirection: 'column', padding: '8px 14px' }, rows),
         footer && cornerButton(footer)));
 }
 
 // 오늘의 일정: 일정 목록 + 휴방 멤버(사진·이름, 없으면 '없음')
-export async function renderToday({ name, soopId, logo, square, theme, date, events, offAir = [], format = 'png' }) {
+export async function renderToday({ name, soopId, logo, square, theme, date, events, offAir = [] }) {
     const [who, ...avatars] = await Promise.all([
         profile({ soopId, logo, theme }),
         ...offAir.map(m => profileBuf(m.soopId).then(buf => thumbOf(`profile|${m.soopId}`, buf, 48))),
@@ -263,12 +263,12 @@ export async function renderToday({ name, soopId, logo, square, theme, date, eve
                     avatars[i] ? img(avatars[i], 24, 24, { borderRadius: 24 }) : h('div', { width: 24, height: 24, borderRadius: 24, background: C.tint }), m.name)))
             : h('div', { fontSize: 14, color: C.none }, '없음'));
     // 모든 일정 뱃지에 같은 가로 폭을 사용한다
-    return out(format, cardOf(CARD_W)(head, h('div', { flexDirection: 'column', gap: 10, padding: '20px 26px 22px' }, list, offRow)), CARD_W);
+    return png(card(head, h('div', { flexDirection: 'column', gap: 10, padding: '20px 26px 22px' }, list, offRow)));
 }
 
 // 이번 달 달력(일요일부터). 칸마다 일정 칩: 색 막대 + 시간·누가 + 내용. 너무 많으면 +N.
 const CAL_MAX = 6;
-export async function renderCalendar({ name, soopId, logo, square, theme, weeks, events, holidays = [], today, format = 'png' }) {
+export async function renderCalendar({ name, soopId, logo, square, theme, weeks, events, holidays = [], today }) {
     const who = await profile({ soopId, logo, theme });
     const month = weeks.flat().find(d => d.inMonth).date;
     const head = scheduleHead(who, { name, subtitle: '이번 달 일정', range: `${month.slice(0, 4)}년 ${Number(month.slice(5, 7))}월`, square });
@@ -303,13 +303,12 @@ export async function renderCalendar({ name, soopId, logo, square, theme, weeks,
     };
     const grid = h('div', { flexDirection: 'column', padding: '0 14px 14px' },
         weeks.map((week, wi) => h('div', { borderTop: wi ? `1px solid ${C.tint}` : 'none', padding: '2px 0' }, week.map(cell))));
-    return out(format, cardOf(CARD_W)(head, wdRow, grid), CARD_W);
+    return png(card(head, wdRow, grid));
 }
 
 const toSvg = async (tree, width) => satori(tree, { width: width + 28, fonts: await loadFonts(), loadAdditionalAsset });
-const out = (format, tree, width = CARD_W) => (format === 'svg' ? toSvg(tree, width) : png(tree, width));
 
-async function png(tree, width) {
+async function png(tree, width = CARD_W) {
     const svg = await toSvg(tree, width);
-    return new Resvg(svg, { fitTo: { mode: 'width', value: 900 }, font: { loadSystemFonts: false } }).render().asPng();
+    return new Resvg(svg, { fitTo: { mode: 'width', value: PNG_W }, font: { loadSystemFonts: false } }).render().asPng();
 }

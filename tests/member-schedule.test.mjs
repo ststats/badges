@@ -1,13 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Readable } from 'node:stream';
 import sharp from 'sharp';
 import { memberWeek, resolveMember, subjectLabel } from '../src/member-schedule.mjs';
 import { starEvents, starOffAir } from '../src/staruniv.mjs';
 import { renderSchedule, renderToday, renderCalendar } from '../src/render.mjs';
 import { monthWeeks } from '../src/lib.mjs';
-import save from '../api/save.js';
-import { getFile, putFile } from '../src/store.mjs';
 
 const now = Date.parse('2026-10-14T05:00:00Z');
 const members = [{이름: '소주양', 'SOOP ID': 'soju2022'}, {이름: '김민철', 'SOOP ID': 'minchul'}, {이름: '숫자', 'SOOP ID': 123}];
@@ -19,7 +16,7 @@ const rows = [
 ];
 const data = {members, events:starEvents(rows,members),offAir:starOffAir([{off_date:'2026-10-14',soop_id:'soju2022'}],members)};
 
-test('badge calendar subject counts match the main calendar', () => {
+test('달력 주체 옆 인원은 스타유니브 달력과 같다', () => {
     const people = [{soop_id:'minchul',name:'김민철'},{soop_id:'soju2022',name:'소주양'}];
     assert.equal(subjectLabel({who:'김민철',subjectType:'person',participants:people},members),'민철 외 1인');
     assert.equal(subjectLabel({who:'민철',subjectType:'person',participants:people.slice(0,1)},members),'민철');
@@ -31,7 +28,7 @@ test('badge calendar subject counts match the main calendar', () => {
     assert.equal(event.subjectLabel,'민철 외 1인');
 });
 
-test('member schedule uses authoritative IDs, individual subjects, date ranges, and per-member off-air', () => {
+test('멤버 주간 일정: SOOP ID 기준, 개인 주체, 여러 날 일정, 멤버별 휴방', () => {
     const soju = memberWeek(data,'soju2022',now);
     assert.deepEqual(soju.days.map(d=>d.events.length),[0,1,1,0,0,0,0]);
     assert.equal(soju.days[2].offAir,true);
@@ -46,19 +43,7 @@ test('member schedule uses authoritative IDs, individual subjects, date ranges, 
     assert.throws(()=>memberWeek(data,'unknown',now),{status:404});
 });
 
-test('retired schedule read/write APIs cannot read or recreate duplicate storage', async () => {
-    for (const method of ['GET','POST']) {
-        const req = Readable.from([JSON.stringify({file:'schedule',content:'new'})]);
-        req.method = method;
-        const res = {setHeader(){},end(body){this.body=body;}};
-        await save(req,res);
-        assert.equal(res.statusCode,410);
-    }
-    await assert.rejects(getFile('schedule'),{status:410});
-    await assert.rejects(putFile('schedule','new'),{status:410});
-});
-
-test('every schedule badge PNG is exactly 900px wide, including empty calendars', async t => {
+test('일정 뱃지 PNG는 빈 달력까지 모두 가로 900px', async t => {
     t.mock.method(globalThis,'fetch',async()=>new Response('',{status:404}));
     const who = {name:'소주양',soopId:'soju2022'};
     const pngs = [

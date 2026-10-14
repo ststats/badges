@@ -16,6 +16,6 @@ const page = async (src, dest) => {
 
 await fs.rm(out, { recursive: true, force: true });
 await page('src/index.html', 'index.html');
-for (const [src, dest] of [['src/site.css', 'site.css'], ['src/lib.mjs', 'lib.mjs'], ['config.json', 'config.json']])
+for (const [src, dest] of [['src/site.css', 'site.css'], ['config.json', 'config.json']])
     await fs.copyFile(path.join(root, src), path.join(out, dest));
 console.log('public/ 준비 완료');

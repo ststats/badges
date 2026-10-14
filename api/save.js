@@ -1,7 +1,10 @@
+// 상태 화면의 쿠키 바꾸기. 비밀번호(EDIT_PASSWORD)를 확인하고 Supabase(badge_files)에 암호문으로 넣는다(바로 반영).
+//   POST /api/save {password, file:'check'}              → 비밀번호만 확인
+//   POST /api/save {password, file:'cookie', cookie}     → SOOP에서 먹는지 보고 암호화해 저장
 import crypto from 'node:crypto';
 import { readJson, sendJson } from '../src/http.mjs';
 import { checkCookie, cookieKeyReady, encryptCookie, forgetBoards } from '../src/live.mjs';
-import { putFile } from '../src/store.mjs';
+import { putCookieCipher } from '../src/store.mjs';
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });
 
@@ -23,7 +26,7 @@ async function saveCookie({ cookie }) {
     } catch (e) {
         throw httpError(400, `SOOP이 이 쿠키를 받지 않았어요(${e.message}). 로그인한 상태에서 다시 복사해 주세요.`);
     }
-    await putFile('cookie', encryptCookie(cookie));
+    await putCookieCipher(encryptCookie(cookie));
     forgetBoards();
     return { extraCount };
 }
@@ -32,10 +35,8 @@ const ACTIONS = { check: async () => ({ ok: true }), cookie: saveCookie };
 
 export default async function handler(req, res) {
     try {
-        if (req.method === 'GET') return sendJson(res, 410, { error: '일정은 스타유니브에서 관리합니다' });
-        if (req.method !== 'POST') throw httpError(405, 'GET·POST만 됩니다');
+        if (req.method !== 'POST') throw httpError(405, 'POST만 됩니다');
         const body = await readJson(req);
-        if (body.file === 'schedule') return sendJson(res, 410, { error: '일정은 스타유니브에서 관리합니다' });
         const action = Object.hasOwn(ACTIONS, body.file) && ACTIONS[body.file];
         if (!action) throw httpError(400, '알 수 없는 요청입니다');
         if (!checkPassword(body.password)) {
