@@ -11,12 +11,10 @@ const dest = process.argv[3];
 const membersResponse = await fetch(`${base}/api/members`);
 assert.equal(membersResponse.status, 200);
 const members = await membersResponse.json();
-assert.ok(members.some(m => m.soopId === 'soju2022'));
-assert.ok(members.some(m => m.soopId === 'minchul'));
+assert.ok(members.length >= 2, '지금 멤버가 두 명 이상 있어야 멤버 선택을 확인할 수 있습니다');
+const picked = members.slice(0, 2);
 for (const route of [
-    'soju/schedule.png',
-    'member/soju2022/schedule.png',
-    'member/minchul/schedule.png',
+    ...picked.map(m => `member/${m.soopId}/schedule.png`),
     'staruniv/today.png',
     'staruniv/calendar.png',
 ]) {
@@ -34,6 +32,7 @@ for (const route of [
     console.log(`${route}: ${meta.width}×${meta.height}`);
 }
 assert.equal((await fetch(`${base}/member/unknown-member/schedule.png`)).status, 404);
+assert.equal((await fetch(`${base}/soju/schedule.png`)).status, 404);
 for (const route of ['/edit', '/edit/']) {
     const response = await fetch(base + route, { redirect: 'manual' });
     assert.ok([302, 307, 308].includes(response.status));
@@ -50,17 +49,14 @@ try {
     page.on('pageerror', e => errors.push(e.message));
     await page.goto(base);
     await page.waitForFunction(() => !document.getElementById('member-select').disabled);
-    for (const [id, name] of [
-        ['minchul', '김민철'],
-        ['soju2022', '소주양'],
-    ]) {
+    for (const { soopId: id, name } of picked.reverse()) {
         await page.selectOption('#member-select', id);
-        assert.equal(await page.locator('[data-key="soju"] h2').textContent(), name);
+        assert.equal(await page.locator('[data-key="member"] h2').textContent(), name);
         assert.equal(
-            await page.locator('[data-key="soju"] .shot img').getAttribute('src'),
+            await page.locator('[data-key="member"] .shot img').getAttribute('src'),
             `/member/${id}/schedule.png`
         );
-        await page.locator('[data-key="soju"] [data-copy="code"]').click();
+        await page.locator('[data-key="member"] [data-copy="code"]').click();
         const copied = await page.evaluate(() => navigator.clipboard.readText());
         assert.ok(copied.includes(`${base}/member/${id}/schedule.png`));
         assert.ok(copied.includes(`https://www.sooplive.co.kr/station/${id}`));

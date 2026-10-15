@@ -1,9 +1,9 @@
 // 뱃지 그림. 주소는 /<대상>/<뱃지>.png (vercel.json이 ?t=대상&b=뱃지로 보낸다)
-//   소주양: /soju/schedule.png
+//   멤버: /member/<SOOP ID>/schedule.png(주간 일정)
 //   캄몬스타즈(스타유니브): /staruniv/today.png(오늘의 일정), /staruniv/calendar.png(이번 달)
 // 그리는 데 CPU가 들어서(Vercel 무료 한도: 월 4시간) 내용이 바뀔 때만 그린다.
-//   /soju/schedule.png         → 지금 내용의 해시를 붙인 /soju/schedule.<해시>.png로 보낸다(CPU 거의 안 씀)
-//   /soju/schedule.<해시>.png  → 한 번 그리고 CDN이 계속 쓴다(내용이 바뀌면 해시가 바뀌므로 오래 둬도 된다)
+//   /staruniv/today.png         → 지금 내용의 해시를 붙인 /staruniv/today.<해시>.png로 보낸다(CPU 거의 안 씀)
+//   /staruniv/today.<해시>.png  → 한 번 그리고 CDN이 계속 쓴다(내용이 바뀌면 해시가 바뀌므로 오래 둬도 된다)
 import crypto from 'node:crypto';
 import { waitUntil } from '@vercel/functions';
 import { config } from '../src/config.mjs';
@@ -25,17 +25,6 @@ const star = async () => ({ name: config.staruniv.name, logo: await starLogo().c
 // 뱃지마다: 그림에 들어갈 값(args)과 그릴 함수, 고정 주소를 CDN이 기억할 초(fresh)
 // 일정 고정 주소는 1분 캐시한다. 모든 일정은 스타유니브에서 조회한다.
 const BADGES = {
-    soju: {
-        async schedule() {
-            const now = Date.now();
-            const week = memberWeek(await starSchedule(), config.soopId, now);
-            return {
-                args: { ...week, theme: config.theme, footer: config.schedule?.footer, today: kstToday(now) },
-                draw: 'renderSchedule',
-                fresh: 60,
-            };
-        },
-    },
     staruniv: {
         async today() {
             const now = Date.now();

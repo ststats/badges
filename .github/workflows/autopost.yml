@@ -1,8 +1,12 @@
-name: 소주양 공지 자동 등록
+name: 공지 자동 등록
 
 on:
   workflow_dispatch:
     inputs:
+      target:
+        description: '멤버 SOOP ID (상태 화면에서 자동 등록을 켠 멤버)'
+        type: string
+        required: true
       delivery_lease:
         description: '감지기가 발급한 실행 번호 (수동 실행은 비워 둠)'
         type: string
@@ -29,7 +33,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: soju-ygosu-autopost
+  group: ygosu-autopost
   cancel-in-progress: false
 
 jobs:
@@ -47,6 +51,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: node scripts/autopost.mjs
         env:
+          TARGET: ${{ inputs.target }}
           DELIVERY_LEASE: ${{ inputs.delivery_lease }}
           DELIVERY_TITLE: ${{ inputs.delivery_title }}
           GITHUB_TOKEN: ${{ github.token }}

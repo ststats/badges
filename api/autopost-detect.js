@@ -1,8 +1,7 @@
-import { validDetectorSecret, detectAndDispatch, dispatchPosting } from '../src/autopost-detect.mjs';
-import { collectPosts } from '../src/autopost.mjs';
+import { validDetectorSecret, detectTargets, dispatchPosting } from '../src/autopost-detect.mjs';
+import { collectPosts, validSoopId } from '../src/autopost.mjs';
 import { currentCookie } from '../src/live.mjs';
-import { config } from '../src/config.mjs';
-import { rpc } from '../src/store.mjs';
+import { getTargets, rpc } from '../src/store.mjs';
 import { sendJson } from '../src/http.mjs';
 
 export default async function handler(req, res) {
@@ -14,22 +13,28 @@ export default async function handler(req, res) {
         return sendJson(res, 200, { dispatched: false, reason: 'disabled' });
     if (!process.env.GITHUB_DISPATCH_TOKEN) return sendJson(res, 503, { error: 'Dispatch credential missing' });
     try {
+        const targets = (await getTargets()).filter(t => t.enabled && validSoopId(t.soopId));
         // 공유 비밀로 인증한 운영 진단만 허용한다. 감지 상태를 변경하거나 글을 쓰지 않는다.
         if (req.query?.check === 'dispatch') {
-            await dispatchPosting(process.env.GITHUB_DISPATCH_TOKEN, fetch, { diagnoseOnly: true });
+            const target = targets.find(t => t.soopId === req.query.target) || targets[0];
+            if (!target) return sendJson(res, 409, { error: 'No enabled target' });
+            await dispatchPosting(process.env.GITHUB_DISPATCH_TOKEN, fetch, {
+                diagnoseOnly: true,
+                target: target.soopId,
+            });
             return sendJson(res, 200, { diagnosticDispatched: true });
         }
-        const posts = await collectPosts({ soopId: config.soopId, cookie: await currentCookie() });
-        const result = await detectAndDispatch({
-            posts,
+        if (!targets.length) return sendJson(res, 200, { dispatched: false, reason: 'no_target' });
+        const cookie = await currentCookie();
+        const results = await detectTargets({
+            targets,
+            collect: soopId => collectPosts({ soopId, cookie }),
             secret,
             rpc,
             dispatch: delivery => dispatchPosting(process.env.GITHUB_DISPATCH_TOKEN, fetch, delivery),
         });
-        return sendJson(res, 200, { ...result, deliveryVersion: 2 });
+        return sendJson(res, 200, { results, deliveryVersion: 3 });
     } catch {
-        return sendJson(res, 502, {
-            error: 'Detector failed; check saved SOOP cookie, migration and dispatch credential',
-        });
+        return sendJson(res, 502, { error: 'Detector failed; check migration, targets and dispatch credential' });
     }
 }

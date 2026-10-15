@@ -1,8 +1,8 @@
-// SOOP 게시판 읽기와 로그인 쿠키(즐겨찾기 전용 글용)
+// SOOP 로그인 쿠키(즐겨찾기 전용 글용): 암호화 저장·풀기와 쿠키가 먹는지 확인
 import crypto from 'node:crypto';
-import { config } from './config.mjs';
-import { boardApiUrl, recentOwnPosts } from './lib.mjs';
+import { boardApiUrl } from './lib.mjs';
 import { keepFresh } from './cache.mjs';
+import { currentMembers } from './staruniv.mjs';
 import { getCookieCipher } from './store.mjs';
 
 // ----- 쿠키: 상태 화면에서 저장한 암호문(badge_files의 cookie)을 COOKIE_KEY로 푼다 -----
@@ -39,73 +39,44 @@ export async function currentCookie() {
     }
 }
 
-// ----- 게시판 -----
-// 같은 API가 .com과 .co.kr 두 주소에 있어, 쿠키로 읽다가 하나가 안 되면 다른 쪽을 쓴다
-async function fetchBoard(cookie) {
-    const get = async host => {
-        const headers = cookie
-            ? {
-                  Cookie: cookie,
-                  Referer: `https://www.sooplive.co.kr/station/${config.soopId}/board`,
-                  'User-Agent': 'Mozilla/5.0',
-              }
-            : {};
-        const res = await fetch(boardApiUrl(config.soopId, host), { headers, signal: AbortSignal.timeout(8000) });
-        if (!res.ok) throw new Error(`SOOP 게시판 HTTP ${res.status}`);
-        const board = await res.json();
-        if (!Array.isArray(board?.contents)) throw new Error('SOOP 게시판 응답 형식이 바뀌었습니다');
-        return recentOwnPosts(board, config.soopId, 20);
-    };
-    try {
-        return await get('api-channel.sooplive.com');
-    } catch (e) {
-        if (!cookie) throw e;
-        return get('api-channel.sooplive.co.kr');
-    }
-}
-
-// 공개 목록(public)과 쿠키로 본 목록(mine)을 각각 30초 기억한다(SOOP이 잠깐 안 되면 직전 목록을 6시간까지).
-let lastCookieError = '';
-
-async function loadMine() {
-    const cookie = await currentCookie();
-    if (!cookie) return boards.public();
-    try {
-        const posts = await fetchBoard(cookie);
-        lastCookieError = '';
-        return posts;
-    } catch (e) {
-        // 잘못되거나 만료된 쿠키면 SOOP이 500을 준다. 그때는 공개 글로 대신한다.
-        lastCookieError = e.message;
-        console.error('쿠키로 게시판 읽기 실패:', e.message);
-        return boards.public();
-    }
-}
-
-const boards = {
-    public: keepFresh(() => fetchBoard(''), { label: 'SOOP 게시판' }),
-    mine: keepFresh(loadMine, { label: 'SOOP 게시판' }),
-};
-
-// 새 쿠키를 저장한 뒤 바로 반영되게 기억을 지운다
-export const forgetBoards = () => {
-    boards.public.forget();
-    boards.mine.forget();
-};
-
-const extraPosts = (mine, pub) => {
-    const pubIds = new Set(pub.map(p => p.titleNo));
-    return mine.filter(p => !pubIds.has(p.titleNo));
-};
-
-// 상태 화면이 새 쿠키를 저장하기 전에 SOOP이 받아 주는지 본다. 공개 목록에 없는 글 수를 돌려준다.
+// ----- 쿠키 확인 -----
+// 지금 멤버 게시판 하나를 이 쿠키로 읽어 본다. 잘못되거나 만료된 쿠키면 SOOP이 오류를 준다.
+// 같은 API가 .com과 .co.kr 두 주소에 있어 하나가 안 되면 다른 쪽을 본다.
 export async function checkCookie(cookie) {
-    const [mine, pub] = await Promise.all([fetchBoard(cookie), boards.public()]);
-    return extraPosts(mine, pub).length;
+    const [member] = await currentMembers();
+    if (!member) throw new Error('확인에 쓸 멤버가 없습니다');
+    let lastError;
+    for (const host of ['api-channel.sooplive.com', 'api-channel.sooplive.co.kr']) {
+        try {
+            const res = await fetch(boardApiUrl(member.soopId, host), {
+                headers: {
+                    Cookie: cookie,
+                    Referer: `https://www.sooplive.co.kr/station/${member.soopId}/board`,
+                    'User-Agent': 'Mozilla/5.0',
+                },
+                signal: AbortSignal.timeout(8000),
+            });
+            if (!res.ok) throw new Error(`SOOP 게시판 HTTP ${res.status}`);
+            if (!Array.isArray((await res.json())?.contents)) throw new Error('SOOP 게시판 응답 형식이 바뀌었습니다');
+            return;
+        } catch (e) {
+            lastError = e;
+        }
+    }
+    throw lastError;
 }
 
-// /status: 쿠키로 받은 목록에 공개 목록에 없는 글이 있으면 즐겨찾기 글까지 받고 있는 것
-export async function cookieStatus() {
-    const [cookie, mine, pub] = await Promise.all([currentCookie(), boards.mine(), boards.public()]);
-    return { hasCookie: !!cookie, error: lastCookieError, extra: extraPosts(mine, pub), posts: mine };
-}
+// /status: state none(쿠키 없음) | error(SOOP이 거절) | ok. 30초 기억한다.
+export const cookieStatus = keepFresh(
+    async () => {
+        const cookie = await currentCookie();
+        if (!cookie) return { state: 'none' };
+        try {
+            await checkCookie(cookie);
+            return { state: 'ok' };
+        } catch (e) {
+            return { state: 'error', error: e.message };
+        }
+    },
+    { label: '쿠키 확인' }
+);

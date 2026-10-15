@@ -2,7 +2,7 @@
   "name": "badges",
   "private": true,
   "type": "module",
-  "description": "소주양·스타유니브 뱃지(Vercel에서 볼 때마다 그림)",
+  "description": "멤버·스타유니브 뱃지(Vercel에서 볼 때마다 그림)와 멤버 공지 와고 자동 등록",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "dev": "node scripts/vercel-public.mjs && node scripts/dev-server.mjs",

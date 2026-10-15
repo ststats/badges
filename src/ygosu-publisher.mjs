@@ -1,10 +1,12 @@
-import { BOARD, articleBody, articleSubject, noticeCategoryCode, postingKey } from './autopost.mjs';
-import { config } from './config.mjs';
+import { articleBody, articleSubject, noticeCategoryCode, postingKey, validBoard, validSoopId } from './autopost.mjs';
 import { profile } from './render.mjs';
 import { captureNotice, noticeDocument } from './notice-document.mjs';
 
-export async function ygosuPublisher(browser, { id, password, log = () => {} }) {
+// target: 상태 화면에서 켠 멤버 {soopId, name, board}
+export async function ygosuPublisher(browser, { id, password, target, log = () => {} }) {
     if (!id || !password) throw new Error('YGOSU_ID와 YGOSU_PASSWORD Secrets가 필요합니다');
+    const { soopId, name, board } = target || {};
+    if (!validSoopId(soopId) || !validBoard(board) || !name) throw new Error('자동 등록 대상 확인 실패');
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     const page = await context.newPage();
     let draftDismissed = false;
@@ -13,11 +15,12 @@ export async function ygosuPublisher(browser, { id, password, log = () => {} }) 
         await dialog.dismiss();
     });
     page.setDefaultTimeout(30000);
-    await page.goto(`https://ygosu.com/board/${BOARD}`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`https://ygosu.com/board/${board}`, { waitUntil: 'domcontentloaded' });
     const categoryCode = noticeCategoryCode(
         await page.evaluate(() =>
             [...document.querySelectorAll('a[href]')].map(a => ({ text: a.textContent, href: a.href }))
-        )
+        ),
+        board
     );
     await page.waitForFunction(() => typeof YG_LOGIN_API !== 'undefined' && typeof YG_LOGIN_SESSION !== 'undefined');
     const login = await page.evaluate(
@@ -35,7 +38,7 @@ export async function ygosuPublisher(browser, { id, password, log = () => {} }) 
                 YG_LOGIN_SESSION.endLogin();
             }
         },
-        { id, password, board: BOARD }
+        { id, password, board }
     );
     if (login !== 'SUCCESS') {
         await context.close();
@@ -44,7 +47,7 @@ export async function ygosuPublisher(browser, { id, password, log = () => {} }) 
     return {
         close: () => context.close(),
         async diagnose() {
-            await page.goto(`https://ygosu.com/board/${BOARD}/?mode=write`, { waitUntil: 'domcontentloaded' });
+            await page.goto(`https://ygosu.com/board/${board}/?mode=write`, { waitUntil: 'domcontentloaded' });
             await page.waitForFunction(
                 () =>
                     typeof YG_BOARD !== 'undefined' &&
@@ -62,13 +65,13 @@ export async function ygosuPublisher(browser, { id, password, log = () => {} }) 
                     authenticated: restored.authenticated === true,
                     refreshAccepted: ctx ? await YG_COMMON.refreshV3Authentication(ctx.csrfScope, token) : false,
                 };
-            }, BOARD);
+            }, board);
         },
         async prepare(post) {
             log('프로필 준비');
-            const who = await profile({ soopId: config.soopId, theme: config.theme });
+            const who = await profile({ soopId });
             log('전체 본문 문서 준비');
-            const html = await noticeDocument({ name: config.name, post, ...who });
+            const html = await noticeDocument({ name, post, ...who });
             log('전체 공지 캡처');
             const images = await captureNotice(browser, html);
             log('와고 글쓰기 폼 확인');
@@ -80,7 +83,7 @@ export async function ygosuPublisher(browser, { id, password, log = () => {} }) 
                     { timeout: 10000 }
                 )
                 .catch(() => null);
-            await page.goto(`https://ygosu.com/board/${BOARD}/?mode=write`, { waitUntil: 'domcontentloaded' });
+            await page.goto(`https://ygosu.com/board/${board}/?mode=write`, { waitUntil: 'domcontentloaded' });
             await page.waitForFunction(
                 () =>
                     typeof YG_BOARD !== 'undefined' &&
@@ -112,7 +115,7 @@ export async function ygosuPublisher(browser, { id, password, log = () => {} }) 
                     if (match) return match[1];
                 }
                 throw new Error('와고 첨부 부모 코드를 확인할 수 없습니다');
-            }, BOARD);
+            }, board);
             const uploads = [];
             log('와고 이미지 업로드');
             for (let i = 0; i < images.length; i++) {
@@ -125,7 +128,7 @@ export async function ygosuPublisher(browser, { id, password, log = () => {} }) 
                             throw new Error('와고 이미지 업로드 실패');
                         return { fileUrl: result.fileUrl, code: result.storage_code };
                     },
-                    { base64: images[i].toString('base64'), parent, name: `soju-${post.titleNo}-${i + 1}.png` }
+                    { base64: images[i].toString('base64'), parent, name: `${soopId}-${post.titleNo}-${i + 1}.png` }
                 );
                 const url = new URL(result.fileUrl, 'https://ygosu.com');
                 if (url.protocol !== 'https:' || !/(^|\.)ygosu\.com$/.test(url.hostname))
@@ -135,9 +138,9 @@ export async function ygosuPublisher(browser, { id, password, log = () => {} }) 
             return uploads;
         },
         async publish(post, uploads) {
-            const subject = articleSubject(post);
-            const body = articleBody(config.soopId, post, uploads);
-            const key = postingKey(post.titleNo);
+            const subject = articleSubject(post, name);
+            const body = articleBody(soopId, post, uploads);
+            const key = postingKey(board, post.titleNo);
             const outcome = await page.evaluate(
                 async ({ board, subject, body, codes, key, categoryCode }) => {
                     try {
@@ -148,11 +151,12 @@ export async function ygosuPublisher(browser, { id, password, log = () => {} }) 
                         data.set('subject', subject);
                         data.set('body', body);
                         data.delete('category_code[]');
-                        data.append('category_code[]', categoryCode);
+                        if (categoryCode) data.append('category_code[]', categoryCode);
                         data.delete('use_notice');
                         data.set('storage_code_list_editor', codes.join(','));
                         const payload = YG_BOARD.getV3ArticleWritePayload(data, ctx);
-                        if (payload.categoryCode !== categoryCode) throw new Error('와고 공지 카테고리 적용 실패');
+                        if (categoryCode && payload.categoryCode !== categoryCode)
+                            throw new Error('와고 공지 카테고리 적용 실패');
                         // 동일 원문은 실행/복구를 넘어 같은 키를 쓴다. 사이트 함수 변경은 요청 동안만 유지한다.
                         const originalKey = YG_BOARD.createV3ArticleIdempotencyKey;
                         let result;
@@ -200,7 +204,7 @@ export async function ygosuPublisher(browser, { id, password, log = () => {} }) 
                         return { failure: `YGOSU_WRITE_HTTP_${status}_${reason}` };
                     }
                 },
-                { board: BOARD, subject, body, codes: uploads.map(x => x.code), key, categoryCode }
+                { board, subject, body, codes: uploads.map(x => x.code), key, categoryCode }
             );
             if (outcome.failure) throw new Error(outcome.failure);
             return outcome.articleId;

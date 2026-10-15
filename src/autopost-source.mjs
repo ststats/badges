@@ -1,4 +1,5 @@
 import { AUDIENCE } from './actions-identity.mjs';
+import { validBoard } from './autopost.mjs';
 
 async function authorizedRequest(endpoint, body, env, fetcher) {
     if (!env.ACTIONS_ID_TOKEN_REQUEST_URL || !env.ACTIONS_ID_TOKEN_REQUEST_TOKEN)
@@ -23,10 +24,20 @@ async function authorizedRequest(endpoint, body, env, fetcher) {
     return response.json();
 }
 
-export async function vercelPosts(env = process.env, fetcher = fetch) {
-    const data = await authorizedRequest('autopost-source', {}, env, fetcher);
-    if (!Array.isArray(data.posts)) throw new Error('Invalid SOOP source response');
-    return data.posts;
+// 켜 둔 멤버의 글과 설정(이름·와고 게시판·켠 시각)
+export async function vercelPosts(soopId, env = process.env, fetcher = fetch) {
+    const data = await authorizedRequest('autopost-source', { soopId }, env, fetcher);
+    const t = data.target;
+    if (
+        !Array.isArray(data.posts) ||
+        t?.soopId !== soopId ||
+        !validBoard(t.board) ||
+        typeof t.name !== 'string' ||
+        !t.name ||
+        !Number.isFinite(t.since)
+    )
+        throw new Error('Invalid SOOP source response');
+    return data;
 }
 
 export async function reportDelivery(lease, status, env = process.env, fetcher = fetch) {

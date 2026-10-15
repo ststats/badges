@@ -13,7 +13,7 @@ test('일정 뱃지를 PNG로 그린다', async () => {
         { events: [{ date: '2026-10-12', time: '20:00', text: '주양CK', order: 0 }], offAir: new Set(['2026-10-13']) },
         now
     );
-    const png = await renderSchedule({ name: '소주양', soopId, days, today: '2026-10-14', footer: '방송국 가기' });
+    const png = await renderSchedule({ name: '멤버A', soopId, days, today: '2026-10-14', footer: '방송국 가기' });
     assert.deepEqual(png.subarray(0, 4), PNG);
 });
 

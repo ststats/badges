@@ -6,13 +6,30 @@ import { githubState } from '../src/autopost-state.mjs';
 import { ygosuPublisher } from '../src/ygosu-publisher.mjs';
 
 // 인증 정보/본문/스크린샷을 Actions 로그나 artifact로 남기지 않는다.
+// TARGET: 상태 화면에서 켠 멤버의 SOOP ID. 이름·와고 게시판·켠 시각은 Vercel이 그 설정에서 돌려준다.
+const soopId = process.env.TARGET || '';
+let source;
+const loadSource = async () => (source ||= await vercelPosts(soopId));
+const loadStore = async () => {
+    const { target } = await loadSource();
+    return githubState({
+        repository: process.env.GITHUB_REPOSITORY,
+        token: process.env.GITHUB_TOKEN,
+        soopId,
+        since: target.since,
+    });
+};
+
 async function main() {
+    console.log('자동 등록 대상 설정·SOOP 글 확인');
+    const { posts, target } = await loadSource();
     if (process.env.DIAGNOSE_ONLY === 'true') {
         const browser = await chromium.launch({ headless: true });
         try {
             const publisher = await ygosuPublisher(browser, {
                 id: process.env.YGOSU_ID,
                 password: process.env.YGOSU_PASSWORD,
+                target,
                 log: console.log,
             });
             try {
@@ -26,7 +43,7 @@ async function main() {
         return;
     }
     console.log('등록 이력 확인');
-    const store = await githubState({ repository: process.env.GITHUB_REPOSITORY, token: process.env.GITHUB_TOKEN });
+    const store = await loadStore();
     const state = store.state;
     const includeLatest = process.env.PUBLISH_LATEST === 'true';
     const recovery = process.env.RECOVER_PENDING || '';
@@ -35,8 +52,6 @@ async function main() {
         console.log('최근 등록 후 5분 이내: 이번 실행은 건너뜁니다');
         return;
     }
-    console.log('SOOP 공개/즐겨찾기 글 수집 및 접근 확인');
-    const posts = await vercelPosts();
     if (!recovery && !postingCandidates(state, posts, includeLatest).length) {
         console.log('등록할 공지 없음: 이미 등록한 최신 글은 재등록하지 않습니다');
         return;
@@ -47,6 +62,7 @@ async function main() {
         const publisher = await ygosuPublisher(browser, {
             id: process.env.YGOSU_ID,
             password: process.env.YGOSU_PASSWORD,
+            target,
             log: console.log,
         });
         try {
@@ -92,8 +108,7 @@ withDelivery({
     lease: process.env.DELIVERY_LEASE || '',
     titleNo: process.env.DELIVERY_TITLE || '',
     run: main,
-    loadState: async () =>
-        (await githubState({ repository: process.env.GITHUB_REPOSITORY, token: process.env.GITHUB_TOKEN })).state,
+    loadState: async () => (await loadStore()).state,
     report: reportDelivery,
 }).catch(error => {
     // 정해진 고정 문구만 분류한다. 오류 원문에는 URL/본문/인증 정보가 포함될 수 있다.
@@ -103,7 +118,8 @@ withDelivery({
         ['원문에 영상이 있습니다', 'SOOP_VIDEO_UNSUPPORTED'],
         ['원문 사진', 'SOOP_IMAGE_LOAD_FAILED'],
         ['사진 주소를 확인', 'SOOP_ATTACHMENT_INVALID'],
-        ['와고 공지 카테고리 확인 실패', 'YGOSU_NOTICE_CATEGORY_MISSING'],
+        ['와고 공지 카테고리 적용 실패', 'YGOSU_NOTICE_CATEGORY_FAILED'],
+        ['자동 등록 대상 확인 실패', 'TARGET_INVALID'],
         ['와고 첨부 부모 코드', 'YGOSU_ATTACHMENT_CONTEXT_MISSING'],
         ['와고 글쓰기 권한/폼', 'YGOSU_WRITE_CONTEXT_INVALID'],
         ['와고 이미지 업로드 실패', 'YGOSU_UPLOAD_FAILED'],

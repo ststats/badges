@@ -27,11 +27,11 @@ try {
     };
     const post = {
         titleNo: 1,
-        titleName: '디자인 확인용 · 제목과 본문을 끝까지 담는 소주양 공지',
+        titleName: '디자인 확인용 · 제목과 본문을 끝까지 담는 멤버 공지',
         regDate: '2026-10-12 21:00:00',
         content: {
             content:
-                '<p>합성 미리보기입니다. 실제 소주양 공지가 아닙니다.</p>' +
+                '<p>합성 미리보기입니다. 실제 공지가 아닙니다.</p>' +
                 Array.from(
                     { length: 100 },
                     (_, i) => `<p>${i + 1}번째 문단 — 긴 글도 줄 수 제한 없이 마지막까지 모두 담습니다.</p>`
@@ -40,7 +40,7 @@ try {
         },
         photos: Array.from({ length: 7 }, (_, i) => ({ url: `https://stimg.sooplive.co.kr/preview-${i + 1}.png` })),
     };
-    const html = await noticeDocument({ name: '소주양', post, colors: { from: '#e8eefc', to: '#f3f0fb' } });
+    const html = await noticeDocument({ name: '멤버A', post, colors: { from: '#e8eefc', to: '#f3f0fb' } });
     const images = await captureNotice(wrapped, html);
     assert.ok(images.length > 1);
     const metas = await Promise.all(images.map(p => sharp(p).metadata()));

@@ -1,38 +1,34 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-delete process.env.SOOP_COOKIE;
-delete process.env.COOKIE_KEY;
-const { cookieStatus } = await import('../src/live.mjs');
+process.env.COOKIE_KEY = 'test-key-for-unit-tests-123456';
+const { checkCookie, cookieStatus } = await import('../src/live.mjs');
 
-const board = titles => ({
-    contents: titles.map((t, i) => ({
-        titleNo: i + 1,
-        titleName: t,
-        userId: 'soju2022',
-        regDate: `2026-10-1${i} 10:00:00`,
-    })),
-    noticeData: [],
-});
+const json = body => new Response(JSON.stringify(body), { status: 200 });
 
-test('SOOP이 실패하면 직전 목록을 쓰고, 6시간이 지나면 실패를 알린다', async t => {
-    let now = Date.parse('2026-10-12T00:00:00Z');
-    t.mock.method(Date, 'now', () => now);
-    let fail = false;
-    t.mock.method(globalThis, 'fetch', async () => {
-        if (fail) throw new Error('SOOP down');
-        return new Response(JSON.stringify(board(['가', '나'])), { status: 200 });
+test('쿠키 확인은 지금 멤버 게시판을 그 쿠키로 읽어 본다', async t => {
+    const boards = [];
+    t.mock.method(globalThis, 'fetch', async (url, opts) => {
+        const u = String(url);
+        if (u.includes('/rpc/api_site_members'))
+            return json({
+                members: [
+                    { 이름: '나간 멤버', 'SOOP ID': 'old01', 퇴단일: '2026-10-01' },
+                    { 이름: '멤버A', 'SOOP ID': 'member01' },
+                ],
+            });
+        if (u.includes('/rpc/')) return json({});
+        boards.push([u, opts.headers.Cookie]);
+        return opts.headers.Cookie === 'good=1' ? json({ contents: [] }) : new Response('', { status: 500 });
     });
+    await checkCookie('good=1');
+    assert.ok(boards[0][0].includes('/channel/member01/board'));
+    // .com이 거절하면 .co.kr도 보고, 둘 다 거절하면 실패
+    await assert.rejects(checkCookie('expired=1'), /HTTP 500/);
     assert.deepEqual(
-        (await cookieStatus()).posts.map(p => p.titleName),
-        ['나', '가']
+        boards.slice(1).map(([u]) => new URL(u).host),
+        ['api-channel.sooplive.com', 'api-channel.sooplive.co.kr']
     );
-    fail = true;
-    now += 60 * 1000; // 30초 기억이 지난 뒤
-    assert.deepEqual(
-        (await cookieStatus()).posts.map(p => p.titleName),
-        ['나', '가']
-    );
-    now += 7 * 3600 * 1000;
-    await assert.rejects(cookieStatus(), /SOOP down|HTTP/);
+    // 저장된 쿠키가 없으면 none
+    assert.deepEqual(await cookieStatus(), { state: 'none' });
 });

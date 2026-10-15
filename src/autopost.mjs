@@ -1,15 +1,25 @@
-// 자동 등록은 SOOP을 직접 조회하며, 실패 시 캐시나 공개 글로 대체하지 않는다.
+// 자동 등록: 상태 화면에서 켠 멤버(SOOP ID)의 새 글을 그 멤버의 와고 게시판에 올린다. SOOP은 캐시 없이 직접 조회한다.
 import { createHash } from 'node:crypto';
 import { boardApiUrl, recentOwnPosts, escapeHTML, postUrl } from './lib.mjs';
 
-export const BOARD = 'pan_sojuyang';
+export const validSoopId = id => /^[a-z0-9_]{1,50}$/.test(id || '');
+export const validBoard = board => /^[a-z0-9_]{2,60}$/.test(board || '');
 
-export function postingKey(titleNo) {
-    if (!/^[1-9]\d*$/.test(String(titleNo))) throw new Error('와고 등록 원문 번호 확인 실패');
-    return createHash('sha256').update(`soju:${BOARD}:${titleNo}`).digest('hex');
+// 게시판 주소(https://ygosu.com/board/pan_x/…)나 이름(pan_x)에서 게시판 이름만
+export function boardName(input) {
+    const text = String(input || '').trim();
+    const match = /^(?:https?:\/\/(?:www\.)?ygosu\.com)?\/?(?:board\/)?([a-z0-9_]+)\/?(?:[?#].*)?$/i.exec(text);
+    const board = match?.[1].toLowerCase();
+    return validBoard(board) ? board : null;
 }
 
-export function noticeCategoryCode(links, board = BOARD) {
+export function postingKey(board, titleNo) {
+    if (!validBoard(board) || !/^[1-9]\d*$/.test(String(titleNo))) throw new Error('와고 등록 원문 번호 확인 실패');
+    return createHash('sha256').update(`${board}:${titleNo}`).digest('hex');
+}
+
+// 게시판에 '공지' 분류가 있으면 그 코드, 없으면 null(분류 없이 올린다)
+export function noticeCategoryCode(links, board) {
     for (const link of links) {
         if (String(link.text).trim() !== '공지') continue;
         const url = new URL(link.href, 'https://ygosu.com');
@@ -21,40 +31,36 @@ export function noticeCategoryCode(links, board = BOARD) {
         )
             return code;
     }
-    throw new Error('와고 공지 카테고리 확인 실패');
+    return null;
 }
 export const postTime = p => Date.parse(String(p.regDate).replace(' ', 'T') + '+09:00');
 
-export function articleSubject(post) {
+export function articleSubject(post, name) {
     if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(String(post.regDate)) || !Number.isFinite(postTime(post)))
         throw new Error('공지 제목 날짜 확인 실패');
-    return `${post.regDate.slice(2, 10).replaceAll('-', '')} 소주양 공지`;
+    return `${post.regDate.slice(2, 10).replaceAll('-', '')} ${name} 공지`;
 }
 
+// 첫 페이지 본인 글. 쿠키가 있으면 즐겨찾기 글까지 받고, 쿠키가 없거나 SOOP이 거절하면 공개 글만 받는다.
 export async function collectPosts({ soopId, cookie, fetcher = fetch }) {
-    if (!cookie) throw new Error('저장된 SOOP 쿠키와 COOKIE_KEY가 필요합니다');
+    if (!validSoopId(soopId)) throw new Error('SOOP ID 확인 실패');
     const url = new URL(boardApiUrl(soopId));
-    const res = await fetcher(url, {
-        headers: {
+    const read = async headers => {
+        const res = await fetcher(url, { headers, signal: AbortSignal.timeout(15000) });
+        if (!res.ok) throw new Error(`SOOP 수집 실패 (${res.status})`);
+        const board = await res.json();
+        if (!Array.isArray(board?.contents)) throw new Error('SOOP 게시판 응답 형식이 바뀌었습니다');
+        return board;
+    };
+    let board;
+    if (cookie)
+        board = await read({
             Cookie: cookie,
             Referer: `https://www.sooplive.co.kr/station/${soopId}/board`,
             'User-Agent': 'Mozilla/5.0',
-        },
-        signal: AbortSignal.timeout(15000),
-    });
-    if (!res.ok) throw new Error(`SOOP 수집 실패 (${res.status}), 공개 글로 대체하지 않았습니다`);
-    const board = await res.json();
-    if (!Array.isArray(board.contents)) throw new Error('SOOP 게시판 응답 형식이 바뀌었습니다');
-    const publicRes = await fetcher(url, { signal: AbortSignal.timeout(15000) });
-    if (!publicRes.ok) throw new Error('즐겨찾기 접근 검증용 공개 목록 조회 실패');
-    const publicBoard = await publicRes.json();
-    if (!Array.isArray(publicBoard.contents)) throw new Error('공개 목록 응답 확인 실패');
+        }).catch(() => null);
+    board ||= await read({});
     const own = recentOwnPosts(board, soopId, Infinity);
-    const publicIds = new Set(recentOwnPosts(publicBoard, soopId, Infinity).map(p => String(p.titleNo)));
-    if (!own.some(p => !publicIds.has(String(p.titleNo)))) {
-        // 만료 쿠키에 공개 목록만 오는 경우를 성공으로 취급하지 않는다.
-        throw new Error('즐겨찾기 글 접근을 확인하지 못했습니다. SOOP 쿠키 또는 최근 즐겨찾기 글 유무를 확인하세요');
-    }
     for (const p of own) {
         if (!Number.isSafeInteger(Number(p.titleNo)) || Number(p.titleNo) <= 0 || !Number.isFinite(postTime(p))) {
             throw new Error('SOOP 글 번호/날짜를 확인할 수 없습니다');

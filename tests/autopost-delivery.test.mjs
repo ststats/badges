@@ -105,7 +105,7 @@ test('결과 API도 인증 없는 완료 통보를 거절한다', async () => {
     assert.equal(res.statusCode, 401);
 });
 
-test('이력 브랜치·파일 유실과 깨진 이력은 초기화하거나 쓰지 않는다', async () => {
+test('이력 브랜치 유실과 깨진 이력은 초기화하거나 쓰지 않는다', async () => {
     const original = globalThis.fetch;
     try {
         for (const missing of ['branch', 'file', 'invalid']) {
@@ -126,9 +126,40 @@ test('이력 브랜치·파일 유실과 깨진 이력은 초기화하거나 쓰
                     };
                 return { ok: false, status: 404 };
             };
-            await assert.rejects(githubState({ repository: 'ststats/badges', token: 'test' }), /이력|올바르지/);
+            await assert.rejects(
+                githubState({ repository: 'ststats/badges', token: 'test', soopId: 'member01' }),
+                /이력|올바르지/
+            );
             assert.equal(mutations, 0);
         }
+    } finally {
+        globalThis.fetch = original;
+    }
+});
+
+test('멤버를 켠 뒤 첫 등록은 켠 시각부터의 새 이력 파일로 시작한다', async () => {
+    const original = globalThis.fetch;
+    const urls = [];
+    try {
+        globalThis.fetch = async (url, opts) => {
+            urls.push(`${opts.method || 'GET'} ${url}`);
+            if (String(url).includes('/git/ref/')) return { ok: true, json: async () => ({ ref: 'existing' }) };
+            if (opts.method === 'PUT') return { ok: true, json: async () => ({ content: { sha: 'new' } }) };
+            return { ok: false, status: 404 };
+        };
+        const store = await githubState({
+            repository: 'ststats/badges',
+            token: 'test',
+            soopId: 'member01',
+            since: 1234,
+        });
+        assert.deepEqual(store.state, { version: 1, since: 1234, done: {} });
+        assert.ok(urls.every(u => u.startsWith('GET'))); // 읽기만 하고 등록 전에는 쓰지 않는다
+        assert.ok(urls.some(u => u.includes('contents/targets/member01.json?ref=autopost-state')));
+        await assert.rejects(
+            githubState({ repository: 'ststats/badges', token: 'test', soopId: '../x', since: 1 }),
+            /대상/
+        );
     } finally {
         globalThis.fetch = original;
     }

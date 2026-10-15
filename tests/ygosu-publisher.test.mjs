@@ -2,9 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import vm from 'node:vm';
 import { ygosuPublisher } from '../src/ygosu-publisher.mjs';
-import { BOARD, postingKey } from '../src/autopost.mjs';
+import { postingKey } from '../src/autopost.mjs';
 
-test('등록 성공과 실패 후 사이트 키 함수를 복원하고 옛 재등록 키를 무시한다', async () => {
+const BOARD = 'pan_member01';
+
+test('등록 성공과 실패 후 사이트 키 함수를 복원하고 같은 원문에는 같은 키를 쓴다', async () => {
     const originalKey = () => 'site-generated-key';
     let fail = false;
     const keys = [];
@@ -45,7 +47,7 @@ test('등록 성공과 실패 후 사이트 키 함수를 복원하고 옛 재�
     const publisher = await ygosuPublisher(browser, {
         id: 'test',
         password: 'test',
-        postingKeys: { '123': 'a'.repeat(64) },
+        target: { soopId: 'member01', name: '멤버A', board: BOARD },
     });
     const post = { titleNo: 123, regDate: '2026-10-12 12:00:00' };
     const uploads = [{ fileUrl: 'https://storage2.ygosu.com/?code=Stest', code: 'Stest', part: '1/1' }];
@@ -55,7 +57,7 @@ test('등록 성공과 실패 후 사이트 키 함수를 복원하고 옛 재�
         fail = true;
         await assert.rejects(publisher.publish(post, uploads), /YGOSU_WRITE_HTTP_0_UNCLASSIFIED/);
         assert.equal(api.createV3ArticleIdempotencyKey, originalKey);
-        assert.deepEqual(keys, [postingKey(123), postingKey(123)]);
+        assert.deepEqual(keys, [postingKey(BOARD, 123), postingKey(BOARD, 123)]);
     } finally {
         await publisher.close();
     }

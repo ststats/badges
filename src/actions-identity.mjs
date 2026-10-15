@@ -1,7 +1,7 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 export const ISSUER = 'https://token.actions.githubusercontent.com';
-export const AUDIENCE = 'badges-soju-autopost';
+export const AUDIENCE = 'badges-autopost';
 const keys = createRemoteJWKSet(new URL(`${ISSUER}/.well-known/jwks`), { timeoutDuration: 5000 });
 const subjects = [
     'repo:ststats/badges:ref:refs/heads/main',

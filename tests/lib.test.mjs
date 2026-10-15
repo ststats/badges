@@ -21,17 +21,17 @@ test('이번 주는 한국 시간 월요일부터', () => {
 test('최근 글: 본인 글만, 고정 공지와 겹치면 한 번, 최신순', () => {
     const board = {
         contents: [
-            { titleNo: 1, userId: 'soju2022', regDate: '2026-10-01 10:00:00' },
+            { titleNo: 1, userId: 'member01', regDate: '2026-10-01 10:00:00' },
             { titleNo: 2, userId: 'fan', regDate: '2026-10-09 10:00:00' },
-            { titleNo: 3, userId: 'SOJU2022', regDate: '2026-10-08 10:00:00' },
+            { titleNo: 3, userId: 'MEMBER01', regDate: '2026-10-08 10:00:00' },
         ],
         noticeData: [
-            { titleNo: 1, userId: 'soju2022', regDate: '2026-10-01 10:00:00' },
-            { titleNo: 4, userId: 'soju2022', regDate: '2026-10-05 10:00:00' },
+            { titleNo: 1, userId: 'member01', regDate: '2026-10-01 10:00:00' },
+            { titleNo: 4, userId: 'member01', regDate: '2026-10-05 10:00:00' },
         ],
     };
     assert.deepEqual(
-        recentOwnPosts(board, 'soju2022', 3).map(p => p.titleNo),
+        recentOwnPosts(board, 'member01', 3).map(p => p.titleNo),
         [3, 4, 1]
     );
 });

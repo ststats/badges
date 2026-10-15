@@ -60,6 +60,14 @@ export const starSchedule = keepFresh(
     { ms: 30000, label: '스타유니브 일정' }
 );
 
+// 지금 멤버(퇴단일 없음, SOOP ID 있음) [{name, soopId}]: 뱃지 멤버 선택·자동 등록 대상 고르기
+export async function currentMembers() {
+    const { members } = await starSchedule();
+    return members
+        .filter(m => m['SOOP ID'] != null && String(m['SOOP ID']).trim() && !m['퇴단일'])
+        .map(m => ({ name: String(m['이름']), soopId: String(m['SOOP ID']).trim() }));
+}
+
 // 로고: 스타유니브 관리자 '팀 로고'에 올린 그림(이름으로 찾음). 바꾸면 10분 안에 뱃지도 바뀐다. 없으면 null.
 export const starLogo = keepFresh(
     async () => {

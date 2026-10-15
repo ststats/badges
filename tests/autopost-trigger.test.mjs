@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPair, SignJWT } from 'jose';
 import { verifyActionsIdentity, ISSUER, AUDIENCE } from '../src/actions-identity.mjs';
-import { validDetectorSecret, detectAndDispatch, dispatchPosting } from '../src/autopost-detect.mjs';
+import { validDetectorSecret, detectAndDispatch, detectTargets, dispatchPosting } from '../src/autopost-detect.mjs';
 import { vercelPosts } from '../src/autopost-source.mjs';
 import sourceHandler from '../api/autopost-source.js';
 
@@ -105,6 +105,28 @@ test('여러 새 글도 최신 번호로 잠금을 얻어 워크플로를 한 �
     assert.equal(calls.length, 1); // dispatch 접수로 완료 기록하지 않는다.
 });
 
+test('켠 멤버를 차례로 보고 한 번에 한 멤버만 실행을 요청한다', async () => {
+    const claimed = [];
+    const dispatched = [];
+    const results = await detectTargets({
+        targets: [{ soopId: 'a' }, { soopId: 'b' }, { soopId: 'c' }, { soopId: 'd' }],
+        collect: async soopId => {
+            if (soopId === 'a') throw new Error('SOOP down');
+            return [post(soopId === 'b' ? 5 : 7)];
+        },
+        secret: 'secret',
+        rpc: async (fn, args) => {
+            claimed.push(args.p_soop_id);
+            return args.p_soop_id === 'b' ? { reason: 'unchanged' } : { lease: '11111111-1111-4111-8111-111111111111' };
+        },
+        dispatch: async delivery => dispatched.push(delivery),
+    });
+    // 한 멤버의 실패가 다른 멤버를 막지 않고, 실행을 요청한 뒤에는 멈춘다(대기 실행이 서로 취소되지 않게)
+    assert.deepEqual(results, { a: 'failed', b: 'unchanged', c: 'dispatched' });
+    assert.deepEqual(claimed, ['b', 'c']);
+    assert.deepEqual(dispatched, [{ lease: '11111111-1111-4111-8111-111111111111', titleNo: '7', target: 'c' }]);
+});
+
 test('dispatch 실패는 성공으로 저장하지 않는다', async () => {
     const finishes = [];
     await assert.rejects(
@@ -127,39 +149,62 @@ test('dispatch 실패는 성공으로 저장하지 않는다', async () => {
 test('Vercel에서 본문을 읽을 때 쿠키·COOKIE_KEY 대신 일회성 GitHub 신원만 보낸다', async () => {
     const calls = [];
     const posts = [post(2)];
+    const target = { soopId: 'member01', name: '멤버A', board: 'pan_member01', since: 1 };
     const result = await vercelPosts(
+        'member01',
         {
             ACTIONS_ID_TOKEN_REQUEST_URL: 'https://github.example/identity',
             ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'request-token',
         },
         async (url, options) => {
             calls.push({ url: String(url), options });
-            return { ok: true, json: async () => (calls.length === 1 ? { value: 'signed-token' } : { posts }) };
+            return { ok: true, json: async () => (calls.length === 1 ? { value: 'signed-token' } : { posts, target }) };
         }
     );
-    assert.deepEqual(result, posts);
+    assert.deepEqual(result, { posts, target });
+    assert.deepEqual(JSON.parse(calls[1].options.body), { soopId: 'member01' });
     assert.equal(new URL(calls[0].url).searchParams.get('audience'), AUDIENCE);
     assert.equal(calls[1].url, 'https://staruniv-badges.vercel.app/api/autopost-source');
     assert.deepEqual(calls[1].options.headers, {
         Authorization: 'Bearer signed-token',
         'Content-Type': 'application/json',
     });
+    // 다른 멤버의 설정이 오면 쓰지 않는다
+    await assert.rejects(
+        vercelPosts(
+            'member02',
+            { ACTIONS_ID_TOKEN_REQUEST_URL: 'https://github.example/identity', ACTIONS_ID_TOKEN_REQUEST_TOKEN: 't' },
+            async url => ({
+                ok: true,
+                json: async () => (String(url).includes('identity') ? { value: 's' } : { posts, target }),
+            })
+        ),
+        /Invalid SOOP source/
+    );
     await dispatchPosting(
         'dispatch-token',
         async (url, opts) => {
             assert.equal(JSON.parse(opts.body).ref, 'main');
             assert.ok(url.endsWith('/autopost.yml/dispatches'));
-            assert.equal(JSON.parse(opts.body).inputs.delivery_title, '2');
+            assert.deepEqual(JSON.parse(opts.body).inputs, {
+                delivery_lease: '11111111-1111-4111-8111-111111111111',
+                delivery_title: '2',
+                target: 'member01',
+            });
             return { status: 204 };
         },
-        { lease: '11111111-1111-4111-8111-111111111111', titleNo: '2' }
+        { lease: '11111111-1111-4111-8111-111111111111', titleNo: '2', target: 'member01' }
     );
     await dispatchPosting(
         'dispatch-token',
         async (_url, opts) => {
-            assert.deepEqual(JSON.parse(opts.body).inputs, { diagnose_only: true });
+            assert.deepEqual(JSON.parse(opts.body).inputs, { diagnose_only: true, target: 'member01' });
             return { status: 204 };
         },
-        { diagnoseOnly: true }
+        { diagnoseOnly: true, target: 'member01' }
+    );
+    await assert.rejects(
+        dispatchPosting('dispatch-token', () => assert.fail(), { diagnoseOnly: true }),
+        /Invalid/
     );
 });

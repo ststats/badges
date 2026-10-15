@@ -11,12 +11,13 @@ import {
     articleSubject,
     noticeCategoryCode,
     postingKey,
+    boardName,
 } from '../src/autopost.mjs';
 import { fullContent, noticeDocument } from '../src/notice-document.mjs';
 
 const post = (id, date = '2026-10-12 12:00:00') => ({
     titleNo: id,
-    userId: 'soju2022',
+    userId: 'member01',
     regDate: date,
     titleName: '제목',
     content: { content: '<p>전체 본문</p>' },
@@ -24,11 +25,25 @@ const post = (id, date = '2026-10-12 12:00:00') => ({
 });
 const state = () => ({ version: 1, since: postTime(post(1)) - 1000, done: {} });
 
-test('등록 키는 같은 원문에 고정되고 다른 원문과 구분된다', () => {
-    assert.equal(postingKey(209610437), postingKey('209610437'));
-    assert.match(postingKey(209610437), /^[a-f0-9]{64}$/);
-    assert.notEqual(postingKey(209610437), postingKey(209610438));
-    for (const id of ['', 0, -1, '01', '1.0', undefined]) assert.throws(() => postingKey(id));
+test('등록 키는 같은 게시판·원문에 고정되고 다른 원문·게시판과 구분된다', () => {
+    assert.equal(postingKey('pan_a', 209610437), postingKey('pan_a', '209610437'));
+    assert.match(postingKey('pan_a', 209610437), /^[a-f0-9]{64}$/);
+    assert.notEqual(postingKey('pan_a', 209610437), postingKey('pan_a', 209610438));
+    assert.notEqual(postingKey('pan_a', 209610437), postingKey('pan_b', 209610437));
+    for (const id of ['', 0, -1, '01', '1.0', undefined]) assert.throws(() => postingKey('pan_a', id));
+    assert.throws(() => postingKey('../x', 1));
+});
+
+test('와고 게시판은 주소나 이름에서 이름만 받는다', () => {
+    for (const input of [
+        'pan_a1',
+        ' pan_a1 ',
+        'https://ygosu.com/board/pan_a1',
+        'https://www.ygosu.com/board/pan_a1/?mode=write',
+    ])
+        assert.equal(boardName(input), 'pan_a1');
+    for (const input of ['', 'https://evil.example/board/pan_a1', 'pan a', '../pan', 'a'])
+        assert.equal(boardName(input), null);
 });
 
 test('본문 co.kr와 첨부 com의 같은 사진은 추가하지 않고 다른 사진은 보존한다', () => {
@@ -85,21 +100,25 @@ test('복구는 지정한 pending 하나만 보내고 오류가 나면 잠금을
 
 test('공지 카테고리는 같은 게시판의 실제 분류 링크에서만 읽는다', () => {
     assert.equal(
-        noticeCategoryCode([
-            { text: '공지', href: '/board/other/?s_category=Cwrong' },
-            { text: '공지사항', href: '/board/notice' },
-            { text: '공지', href: 'https://evil.example/board/pan_sojuyang/?s_category=Cwrong' },
-            { text: ' 공지 ', href: '/board/pan_sojuyang/?s_category=C6a50b533b88545.30004058' },
-        ]),
+        noticeCategoryCode(
+            [
+                { text: '공지', href: '/board/other/?s_category=Cwrong' },
+                { text: '공지사항', href: '/board/notice' },
+                { text: '공지', href: 'https://evil.example/board/pan_member01/?s_category=Cwrong' },
+                { text: ' 공지 ', href: '/board/pan_member01/?s_category=C6a50b533b88545.30004058' },
+            ],
+            'pan_member01'
+        ),
         'C6a50b533b88545.30004058'
     );
-    assert.throws(() => noticeCategoryCode([]), /카테고리/);
+    // '공지' 분류가 없는 게시판은 분류 없이 올린다
+    assert.equal(noticeCategoryCode([{ text: '공지', href: '/board/other/?s_category=Cx' }], 'pan_member01'), null);
 });
 
-test('와고 제목은 원문 공지 날짜의 YYMMDD 소주양 공지 형식이다', () => {
-    assert.equal(articleSubject(post(1)), '261012 소주양 공지');
-    assert.equal(articleSubject(post(2, '2025-12-31 23:59:59')), '251231 소주양 공지');
-    assert.throws(() => articleSubject({ regDate: '' }), /날짜/);
+test('와고 제목은 원문 공지 날짜의 YYMMDD 멤버 이름 공지 형식이다', () => {
+    assert.equal(articleSubject(post(1), '멤버A'), '261012 멤버A 공지');
+    assert.equal(articleSubject(post(2, '2025-12-31 23:59:59'), '멤버B'), '251231 멤버B 공지');
+    assert.throws(() => articleSubject({ regDate: '' }, '멤버A'), /날짜/);
 });
 
 test('초기 테스트는 기준 이전 최신 하나만 등록하고 재실행해도 다른 과거 글을 올리지 않는다', async () => {
@@ -134,7 +153,7 @@ test('첫 페이지와 고정글을 중복 제거하고 과거 페이지는 조�
     const pages = [];
     const p = post(2);
     const result = await collectPosts({
-        soopId: 'soju2022',
+        soopId: 'member01',
         cookie: 'auth=test',
         fetcher: async (url, opts) => {
             if (!opts.headers) return { ok: true, json: async () => ({ contents: [], noticeData: [] }) };
@@ -158,32 +177,39 @@ test('첫 페이지와 고정글을 중복 제거하고 과거 페이지는 조�
     assert.deepEqual(pages, [1]);
 });
 
-test('인증 수집 오류를 공개 목록으로 대체하지 않는다', async () => {
-    await assert.rejects(
-        collectPosts({ soopId: 'soju2022', cookie: '', fetcher: () => assert.fail() }),
-        /저장된 SOOP 쿠키/
+test('쿠키가 없거나 SOOP이 쿠키를 거절하면 공개 글을 받는다', async () => {
+    const publicBoard = { ok: true, json: async () => ({ contents: [post(1)] }) };
+    const noCookie = await collectPosts({
+        soopId: 'member01',
+        cookie: '',
+        fetcher: async (_url, opts) => {
+            assert.deepEqual(opts.headers, {});
+            return publicBoard;
+        },
+    });
+    assert.deepEqual(
+        noCookie.map(p => p.titleNo),
+        [1]
     );
-    let calls = 0;
-    await assert.rejects(
-        collectPosts({
-            soopId: 'soju2022',
-            cookie: 'auth=test',
-            fetcher: async () => {
-                calls++;
-                return { ok: false, status: 401 };
-            },
-        }),
-        /공개 글로 대체하지/
+    const calls = [];
+    const rejected = await collectPosts({
+        soopId: 'member01',
+        cookie: 'expired',
+        fetcher: async (_url, opts) => {
+            calls.push(opts.headers.Cookie || 'public');
+            return opts.headers.Cookie ? { ok: false, status: 500 } : publicBoard;
+        },
+    });
+    assert.deepEqual(
+        rejected.map(p => p.titleNo),
+        [1]
     );
-    assert.equal(calls, 1);
+    assert.deepEqual(calls, ['expired', 'public']);
     await assert.rejects(
-        collectPosts({
-            soopId: 'soju2022',
-            cookie: 'expired',
-            fetcher: async () => ({ ok: true, json: async () => ({ contents: [post(1)] }) }),
-        }),
-        /즐겨찾기 글 접근/
+        collectPosts({ soopId: 'member01', cookie: '', fetcher: async () => ({ ok: false, status: 503 }) }),
+        /SOOP 수집 실패/
     );
+    await assert.rejects(collectPosts({ soopId: '../x', cookie: '', fetcher: () => assert.fail() }), /SOOP ID/);
 });
 
 test('등록 전 pending을 영구 저장하고 이미 처리한 글은 건너뛴다', async () => {
@@ -305,13 +331,13 @@ test('긴 제목/100문단/사진 7장을 모두 포함하고 위험한 HTML은 
     p.content.content =
         Array.from({ length: 100 }, (_, i) => `<p>본문 ${i} 끝</p>`).join('') + '<script>alert(1)</script>';
     p.photos = Array.from({ length: 7 }, (_, i) => ({ url: `https://stimg.sooplive.co.kr/${i}.png` }));
-    const html = await noticeDocument({ name: '소주양', post: p });
+    const html = await noticeDocument({ name: '멤버A', post: p });
     assert.ok(html.includes(p.titleName));
     assert.ok(html.includes('본문 99 끝'));
     assert.equal((html.match(/alt="첨부 사진"/g) || []).length, 7);
     assert.ok(!html.includes('alert(1)'));
     assert.ok(!html.includes('line-clamp'));
-    const body = articleBody('soju2022', p, [
+    const body = articleBody('member01', p, [
         { fileUrl: 'https://storage2.ygosu.com/?code=Stest.123', code: 'Stest.123', part: '1/1' },
     ]);
     assert.ok(body.includes('/post/1'));
@@ -321,7 +347,7 @@ test('긴 제목/100문단/사진 7장을 모두 포함하고 위험한 HTML은 
     assert.ok(!body.includes('SOOP 원문 보기'));
     assert.throws(
         () =>
-            articleBody('soju2022', p, [
+            articleBody('member01', p, [
                 { fileUrl: 'https://storage2.ygosu.com/?code=Sother', code: 'Stest.123', part: '1/1' },
             ]),
         /첨부 코드 불일치/
