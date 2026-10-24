@@ -42,14 +42,19 @@ export function starOffAir(rows, members) {
     return byDate;
 }
 
+// 멤버 명단만 따로 기억한다: 자동 등록 감지(2분마다)는 일정 없이 명단만 쓴다.
+const starMembers = keepFresh(async () => (await rpc('api_site_members', {}))?.members || [], {
+    ms: 30000,
+    label: '스타유니브 멤버',
+});
+
 export const starSchedule = keepFresh(
     async () => {
-        const [schedule, holidays, members] = await Promise.all([
+        const [schedule, holidays, list] = await Promise.all([
             rpc('api_schedule', {}),
             rpc('api_holidays', {}).catch(() => ({})),
-            rpc('api_site_members', {}),
+            starMembers(),
         ]);
-        const list = members?.members || [];
         return {
             members: list,
             events: starEvents(schedule?.events, list),
@@ -62,7 +67,7 @@ export const starSchedule = keepFresh(
 
 // 지금 멤버(퇴단일 없음, SOOP ID 있음) [{name, soopId}]: 뱃지 멤버 선택·자동 등록 대상 고르기
 export async function currentMembers() {
-    const { members } = await starSchedule();
+    const members = await starMembers();
     return members
         .filter(m => m['SOOP ID'] != null && String(m['SOOP ID']).trim() && !m['퇴단일'])
         .map(m => ({ name: String(m['이름']), soopId: String(m['SOOP ID']).trim() }));
