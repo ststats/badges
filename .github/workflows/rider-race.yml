@@ -1,0 +1,40 @@
+name: 캄몬라이더 경기
+
+# api/rider-tick.js가 10분마다 띄운다(pg_cron → supabase/rider-tick.sql). 저장소 변수 RIDER_RACE_ENABLED=false면 멈춘다.
+# 결과는 rider-race 브랜치에 latest.gif·latest.json 한 벌만 덮어 올린다(기록을 쌓지 않는다).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: rider-race
+  cancel-in-progress: false
+
+jobs:
+  race:
+    if: vars.RIDER_RACE_ENABLED != 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: command -v ffmpeg || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
+      - run: node scripts/rider-race.mjs out
+      - name: rider-race 브랜치에 올리기
+        working-directory: out
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          printf '{ "git": { "deploymentEnabled": false } }\n' > vercel.json
+          printf '캄몬라이더 최신 경기. 10분마다 덮어씁니다(.github/workflows/rider-race.yml).\n' > README.md
+          git init -q -b rider-race
+          git add .
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -qm 'Latest race'
+          git push -qf "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" rider-race
