@@ -1,7 +1,8 @@
 name: 캄몬라이더 경기
 
 # api/rider-tick.js가 10분마다 띄운다(pg_cron → supabase/rider-tick.sql). 저장소 변수 RIDER_RACE_ENABLED=false면 멈춘다.
-# 결과는 rider-race 브랜치에 latest.gif·latest.json 한 벌만 덮어 올린다(기록을 쌓지 않는다).
+# 정각 6분 전에 떠서 미리 녹화하고, 다음 10분 정각(latest.json의 publish_at)에 rider-race 브랜치에 올린다.
+# 브랜치에는 latest.webp·latest.json 한 벌만 덮어 올린다(기록을 쌓지 않는다). 주소는 /rider/latest.webp(api/rider.js).
 on:
   workflow_dispatch:
 
@@ -25,7 +26,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: command -v ffmpeg || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
+      # 움짤 WebP 인코더(libwebp_anim)가 있는 ffmpeg가 필요하다
+      - run: ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libwebp_anim || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
       - run: node scripts/rider-race.mjs out
       - name: rider-race 브랜치에 올리기
         working-directory: out
@@ -37,4 +39,8 @@ jobs:
           git init -q -b rider-race
           git add .
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -qm 'Latest race'
+          # 정각까지 기다렸다 올린다(이미 지났으면 바로)
+          wait=$(node -p "Math.max(0, Math.ceil((Date.parse(require('./latest.json').publish_at) - Date.now()) / 1000))")
+          echo "정각까지 ${wait}초 기다림"
+          sleep "$wait"
           git push -qf "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" rider-race

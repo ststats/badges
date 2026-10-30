@@ -23,8 +23,8 @@
     },
     "rewrites": [
         {
-            "source": "/rider/latest.:ext(gif|json)",
-            "destination": "https://raw.githubusercontent.com/ststats/badges/rider-race/latest.:ext"
+            "source": "/rider/:f(latest.webp|latest.json)",
+            "destination": "/api/rider?f=:f"
         },
         {
             "source": "/member/:id([a-zA-Z0-9_-]+)/schedule.:v([0-9a-f]{12}).png",
@@ -57,17 +57,6 @@
             "source": "/edit/",
             "destination": "https://staruniv.vercel.app/schedule/",
             "permanent": false
-        }
-    ],
-    "headers": [
-        {
-            "source": "/rider/(.*)",
-            "headers": [
-                {
-                    "key": "Cache-Control",
-                    "value": "public, max-age=60, s-maxage=60"
-                }
-            ]
         }
     ]
 }
