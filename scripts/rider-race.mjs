@@ -88,13 +88,23 @@ try {
         },
         { count: RACERS, promised }
     );
-    // 시상 창이 뜨면 버튼 줄(다시 경기·나가기 등) 자리에 다음 경기 안내를 넣는다(녹화하는 이 창에서만 바꾼다)
+    // 시상 창이 뜨면 경기 화면 가운데로 옮기고, 버튼 줄(다시 경기·나가기 등) 자리에 다음 경기 안내를 넣는다
+    // (녹화하는 이 창에서만 바꾼다)
     const announce = text =>
         page.evaluate(text => {
             const dialog = document.getElementById('ceremony');
             const actions = dialog?.open && dialog.querySelector('.ceremony-actions');
             if (!actions) return false;
             document.getElementById('ceremonyClose').hidden = true;
+            // 시상 창은 브라우저 화면 가운데에 뜨는데 녹화는 경기 화면만 찍으므로 경기 화면 가운데로 옮긴다
+            const area = document.querySelector('.track-wrap').getBoundingClientRect();
+            Object.assign(dialog.style, {
+                position: 'fixed',
+                margin: '0',
+                left: `${area.left + area.width / 2}px`,
+                top: `${area.top + area.height / 2}px`,
+                transform: 'translate(-50%, -50%)',
+            });
             const box = document.createElement('div');
             box.textContent = text;
             Object.assign(box.style, {
