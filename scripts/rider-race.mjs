@@ -1,7 +1,8 @@
-// 캄몬라이더(스타유니브 도구) 1바퀴 경기를 활동 멤버 중 랜덤 3명으로 돌려 움짤 WebP로 남긴다. rider-race.yml이 10분마다 부른다.
-// 정각 6분 전에 띄워 미리 녹화하고, 올릴 시각(publish_at: 다음 10분 정각)을 latest.json에 적는다.
+// 캄몬라이더(스타유니브 도구) 1바퀴 경기를 활동 멤버 3명으로 돌려 움짤 WebP로 남긴다. rider-race.yml이 10분마다 부른다.
+// 정각 8분 전에 띄워 미리 녹화하고, 올릴 시각(publish_at: 다음 10분 정각)을 latest.json에 적는다.
+// 경기마다 다음 경기 후보 3명을 미리 뽑아 결승 뒤 화면과 latest.json(next)에 알리고, 다음 회차는 그 3명으로 달린다.
 // 화면 갱신(requestAnimationFrame)을 직접 한 칸씩 넘겨 러너가 느려도 경기 속도가 일정하다.
-// usage: node scripts/rider-race.mjs <출력 폴더>  → latest.webp, latest.json
+// usage: node scripts/rider-race.mjs <출력 폴더> [지난 latest.json]  → latest.webp, latest.json
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -13,18 +14,32 @@ const RACERS = 3;
 const STEP_FPS = 30; // 경기 화면 갱신(1×속도)
 const OUT_FPS = 15;
 const OUT_WIDTH = 720;
-const QUALITY = 80; // 커뮤니티에 붙이는 용도라 화질 우선(약 6MB)
+const QUALITY = 85; // 커뮤니티에 붙이는 용도라 화질 우선
+// 화면을 2배 밀도로 찍어 줄인다(1배로 찍으면 글자·선이 흐리다)
+const SCALE = 2;
 const SLOT_MS = 10 * 60 * 1000;
-const TAIL_SEC = 3; // 결승 뒤 시상 화면을 보여 주는 시간
+const TAIL_SEC = 4; // 결승 뒤 시상 화면과 다음 경기 안내를 보여 주는 시간
 const MAX_SEC = 180;
 
 const out = path.resolve(process.argv[2] || 'out');
+const prev = await fs
+    .readFile(process.argv[3] || '', 'utf8')
+    .then(JSON.parse)
+    .catch(() => ({}));
+// 올릴 시각: 지금부터 1분 뒤 이후의 첫 10분 정각(정각 8분 전에 뜨면 그 정각)
+const publishAt = new Date(Math.ceil((Date.now() + 60000) / SLOT_MS) * SLOT_MS);
+const nextAt = new Date(publishAt.getTime() + SLOT_MS);
+const kst = d =>
+    d.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false });
+// 지난 회차가 이 시각으로 예고한 후보가 있으면 그대로 달린다(빠진 회차가 있으면 새로 뽑는다)
+const promised = prev?.next?.at === publishAt.toISOString() ? prev.next.lineup : null;
+
 const frames = await fs.mkdtemp(path.join(os.tmpdir(), 'rider-'));
 await fs.mkdir(out, { recursive: true });
 
 const browser = await chromium.launch(process.env.CHROME ? { executablePath: process.env.CHROME } : {});
 try {
-    const page = await browser.newPage({ viewport: { width: 1280, height: 860 }, deviceScaleFactor: 1 });
+    const page = await browser.newPage({ viewport: { width: 1280, height: 860 }, deviceScaleFactor: SCALE });
     await page.addInitScript(() => {
         let queue = [];
         window.requestAnimationFrame = cb => queue.push(cb);
@@ -44,29 +59,70 @@ try {
         if (Date.now() - loaded > 60000) throw new Error('캄몬라이더를 불러오지 못했습니다');
         await page.waitForTimeout(100);
     }
-    const lineup = await page.evaluate(count => {
-        if (BASE_DRIVERS < count) throw new Error(`활동 멤버가 ${BASE_DRIVERS}명뿐입니다`);
-        const ids = [...Array(BASE_DRIVERS).keys()];
-        for (let i = ids.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [ids[i], ids[j]] = [ids[j], ids[i]];
-        }
-        chosen = new Set(ids.slice(0, count));
-        document.getElementById('laps').value = '1';
-        syncSelection();
-        if (!start()) throw new Error('경기를 시작하지 못했습니다');
-        document.getElementById('cinema').click(); // 화면 확대(중계 카메라 4배)
-        return ids.slice(0, count).map(i => names[i]);
-    }, RACERS);
+    const { lineup, next } = await page.evaluate(
+        ({ count, promised }) => {
+            if (BASE_DRIVERS < count * 2) throw new Error(`활동 멤버가 ${BASE_DRIVERS}명뿐입니다`);
+            const members = [...Array(BASE_DRIVERS).keys()];
+            const shuffle = list => {
+                const ids = [...list];
+                for (let i = ids.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [ids[i], ids[j]] = [ids[j], ids[i]];
+                }
+                return ids;
+            };
+            // 예고한 후보가 모두 아직 활동 멤버면 그대로, 아니면 새로 뽑는다
+            const kept = (promised || []).map(name => names.indexOf(name));
+            const ids =
+                kept.length === count && kept.every(i => i >= 0 && i < BASE_DRIVERS)
+                    ? kept
+                    : shuffle(members).slice(0, count);
+            // 다음 후보는 이번 출전자와 겹치지 않게 뽑는다
+            const nextIds = shuffle(members.filter(i => !ids.includes(i))).slice(0, count);
+            chosen = new Set(ids);
+            document.getElementById('laps').value = '1';
+            syncSelection();
+            if (!start()) throw new Error('경기를 시작하지 못했습니다');
+            document.getElementById('cinema').click(); // 화면 확대(중계 카메라 4배)
+            return { lineup: ids.map(i => names[i]), next: nextIds.map(i => names[i]) };
+        },
+        { count: RACERS, promised }
+    );
+    // 시상 창이 뜨면 버튼 줄(다시 경기·나가기 등) 자리에 다음 경기 안내를 넣는다(녹화하는 이 창에서만 바꾼다)
+    const announce = text =>
+        page.evaluate(text => {
+            const dialog = document.getElementById('ceremony');
+            const actions = dialog?.open && dialog.querySelector('.ceremony-actions');
+            if (!actions) return false;
+            document.getElementById('ceremonyClose').hidden = true;
+            const box = document.createElement('div');
+            box.textContent = text;
+            Object.assign(box.style, {
+                width: '100%',
+                padding: '12px 16px',
+                borderRadius: '12px',
+                background: '#102040',
+                color: '#fff',
+                font: '800 18px Pretendard, sans-serif',
+                textAlign: 'center',
+            });
+            actions.replaceChildren(box);
+            return true;
+        }, text);
     const wrap = page.locator('.track-wrap');
     const every = STEP_FPS / OUT_FPS;
     let shot = 0,
-        tail = 0;
+        tail = 0,
+        announced = false;
     for (let i = 0; i < STEP_FPS * MAX_SEC; i++) {
         const state = await page.evaluate(ms => (window.__step(ms), state), 1000 / STEP_FPS);
+        if (state === 'finished') {
+            tail++;
+            if (!announced) announced = await announce(`다음 경기 ${kst(nextAt)} · ${next.join(' · ')}`);
+        }
         if (i % every === 0)
             await wrap.screenshot({ path: path.join(frames, `f${String(shot++).padStart(5, '0')}.png`) });
-        if (state === 'finished' && ++tail > STEP_FPS * TAIL_SEC) break;
+        if (tail > STEP_FPS * TAIL_SEC) break;
         if (i === STEP_FPS * MAX_SEC - 1) throw new Error('경기가 끝나지 않았습니다');
     }
     const results = await page.evaluate(() =>
@@ -97,19 +153,19 @@ try {
         path.join(out, 'latest.webp'),
     ]);
     const size = (await fs.stat(path.join(out, 'latest.webp'))).size;
-    // 5분 넘게 늦은 작업은 기다리지 않고 바로 올린다(지난 정각이 올릴 시각이 된다)
-    const publishAt = new Date((Math.floor((Date.now() - SLOT_MS / 2) / SLOT_MS) + 1) * SLOT_MS);
     const info = {
         publish_at: publishAt.toISOString(),
         laps: 1,
         lineup,
         results,
+        next: { at: nextAt.toISOString(), lineup: next },
         frames: shot,
         bytes: size,
     };
     await fs.writeFile(path.join(out, 'latest.json'), JSON.stringify(info, null, 2) + '\n');
     console.log(
-        `경기 ${lineup.join(', ')} → 1위 ${results[0]?.name} · ${shot}장 · ${(size / 1e6).toFixed(2)}MB · ${publishAt.toISOString()} 공개`
+        `${kst(publishAt)} 경기 ${lineup.join(', ')}${promised ? '(예고대로)' : ''} → 1위 ${results[0]?.name} · ` +
+            `${shot}장 · ${(size / 1e6).toFixed(2)}MB · 다음 ${kst(nextAt)} ${next.join(', ')}`
     );
 } finally {
     await browser.close();

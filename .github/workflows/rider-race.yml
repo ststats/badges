@@ -1,7 +1,7 @@
 name: 캄몬라이더 경기
 
 # api/rider-tick.js가 10분마다 띄운다(pg_cron → supabase/rider-tick.sql). 저장소 변수 RIDER_RACE_ENABLED=false면 멈춘다.
-# 정각 6분 전에 떠서 미리 녹화하고, 다음 10분 정각(latest.json의 publish_at)에 rider-race 브랜치에 올린다.
+# 정각 8분 전에 떠서 미리 녹화하고, 다음 10분 정각(latest.json의 publish_at)에 rider-race 브랜치에 올린다.
 # 브랜치에는 latest.webp·latest.json 한 벌만 덮어 올린다(기록을 쌓지 않는다). 주소는 /rider/latest.webp(api/rider.js).
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ jobs:
   race:
     if: vars.RIDER_RACE_ENABLED != 'false'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -28,7 +28,13 @@ jobs:
       - run: npx playwright install --with-deps chromium
       # 움짤 WebP 인코더(libwebp_anim)가 있는 ffmpeg가 필요하다
       - run: ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libwebp_anim || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
-      - run: node scripts/rider-race.mjs out
+      # 지난 회차가 예고한 다음 경기 후보(없으면 새로 뽑는다)
+      - run: |
+          curl -fsS -H "Authorization: Bearer ${GITHUB_TOKEN}" -H 'Accept: application/vnd.github.raw' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/latest.json?ref=rider-race" -o prev.json || echo '{}' > prev.json
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - run: node scripts/rider-race.mjs out prev.json
       - name: rider-race 브랜치에 올리기
         working-directory: out
         env:
