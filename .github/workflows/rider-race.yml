@@ -45,8 +45,8 @@ jobs:
           git init -q -b rider-race
           git add .
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -qm 'Latest race'
-          # 정각까지 기다렸다 올린다(이미 지났으면 바로)
-          wait=$(node -p "Math.max(0, Math.ceil((Date.parse(require('./latest.json').publish_at) - Date.now()) / 1000))")
-          echo "정각까지 ${wait}초 기다림"
+          # 올리는 데 3초쯤 걸려 정각 3초 전에 올리기 시작한다(이미 지났으면 바로)
+          wait=$(node -p "Math.max(0, (Date.parse(require('./latest.json').publish_at) - 3000 - Date.now()) / 1000).toFixed(3)")
+          echo "정각 3초 전까지 ${wait}초 기다림"
           sleep "$wait"
           git push -qf "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" rider-race

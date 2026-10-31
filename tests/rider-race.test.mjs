@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { dispatchRace, latestRaceSha, raceSlot } from '../src/rider-race.mjs';
+import { dispatchRace, latestRaceSha, raceCacheSeconds, raceSlot } from '../src/rider-race.mjs';
 
 test('2분마다 오는 호출 중 정각 8분 전 한 번만 경기를 띄운다', () => {
     const at = m => new Date(Date.UTC(2026, 9, 30, 3, m, 5));
@@ -25,4 +25,12 @@ test('경기 녹화 작업을 main에서 띄운다', async () => {
     assert.deepEqual(JSON.parse(calls[0][1].body), { ref: 'main' });
     await assert.rejects(dispatchRace('tok', async () => ({ status: 403 })));
     await assert.rejects(dispatchRace('', async () => ({ status: 204 })));
+});
+
+test('정각 직후 30초는 기억하지 않고, 그 밖에는 다음 정각을 넘지 않게 최대 60초 기억한다', () => {
+    const at = (m, sec) => Date.UTC(2026, 9, 30, 3, m, sec);
+    assert.equal(raceCacheSeconds(at(10, 0)), 0);
+    assert.equal(raceCacheSeconds(at(10, 29)), 0);
+    assert.equal(raceCacheSeconds(at(10, 30)), 60);
+    assert.equal(raceCacheSeconds(at(19, 59)), 1);
 });

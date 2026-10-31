@@ -40,3 +40,12 @@ export async function dispatchRace(token, fetcher = fetch) {
     );
     if (response.status !== 204) throw new Error('Workflow dispatch rejected');
 }
+
+// 최신 경기 주소를 얼마나 기억할지(초). 올라오는 순간(정각 직후 30초)에는 기억하지 않고 매번 확인하고,
+// 그 밖에는 다음 정각을 넘지 않게 최대 60초만 기억한다(러너가 늦어 30초 뒤에 올라와도 1분 안에 바뀐다).
+export const FRESH_SEC = 30;
+export const KEEP_MAX_SEC = 60;
+export function raceCacheSeconds(now = Date.now()) {
+    const into = now % (RACE_EVERY_MIN * 60000);
+    return into < FRESH_SEC * 1000 ? 0 : Math.min(KEEP_MAX_SEC, Math.floor((RACE_EVERY_MIN * 60000 - into) / 1000));
+}
