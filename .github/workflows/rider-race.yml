@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  actions: write # 지난 녹화 기록 정리
 
 concurrency:
   group: rider-race
@@ -50,3 +51,10 @@ jobs:
           echo "정각 3초 전까지 ${wait}초 기다림"
           sleep "$wait"
           git push -qf "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" rider-race
+      # 하루 144번 쌓이는 기록을 정리한다. 실패한 회차는 원인을 볼 수 있게 남긴다.
+      - name: 지난 녹화 기록 지우기
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/rider-race.yml/runs?status=success&per_page=100" --jq '.workflow_runs[].id' |
+            while read -r id; do gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/runs/${id}" > /dev/null || true; done

@@ -15,8 +15,8 @@ const PAGE = 'https://staruniv.vercel.app/calmmon-rider.html';
 const RACERS = 3;
 const STEP_FPS = 30; // 경기 화면 갱신(1×속도)
 const OUT_FPS = 15;
-const OUT_WIDTH = 720;
-const QUALITY = 85; // 커뮤니티에 붙이는 용도라 화질 우선
+const OUT_WIDTH = 640;
+const QUALITY = 75; // 화질과 크기(약 4.6MB: 보는 사람마다 Vercel 전송량을 쓴다) 사이
 // 화면을 2배 밀도로 찍어 줄인다(1배로 찍으면 글자·선이 흐리다)
 const SCALE = 2;
 const SLOT_MS = 10 * 60 * 1000;
