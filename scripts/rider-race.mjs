@@ -2,8 +2,10 @@
 // 정각 8분 전에 띄워 미리 녹화하고, 올릴 시각(publish_at: 다음 10분 정각)을 latest.json에 적는다.
 // 경기마다 다음 경기 후보 3명을 미리 뽑아 결승 뒤 화면과 latest.json(next)에 알리고, 다음 회차는 그 3명으로 달린다.
 // 화면 갱신(requestAnimationFrame)을 직접 한 칸씩 넘겨 러너가 느려도 경기 속도가 일정하다.
+// 결과는 정각 공개 전까지 아무도 모르게 실행 기록(로그)에 남기지 않는다. 시드는 공개 뒤 재현용으로 latest.json에 적는다.
 // usage: node scripts/rider-race.mjs <출력 폴더> [지난 latest.json]  → latest.webp, latest.json
 import { execFileSync } from 'node:child_process';
+import { randomInt } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -33,6 +35,8 @@ const kst = d =>
     d.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit', hour12: false });
 // 지난 회차가 이 시각으로 예고한 후보가 있으면 그대로 달린다(빠진 회차가 있으면 새로 뽑는다)
 const promised = prev?.next?.at === publishAt.toISOString() ? prev.next.lineup : null;
+// 경기 시드(스타유니브 캄몬라이더 start(seed)). 녹화할 때 새로 뽑아 미리 정해 두지 않는다
+const seed = randomInt(0, 2 ** 32);
 
 const frames = await fs.mkdtemp(path.join(os.tmpdir(), 'rider-'));
 await fs.mkdir(out, { recursive: true });
@@ -60,7 +64,7 @@ try {
         await page.waitForTimeout(100);
     }
     const { lineup, next } = await page.evaluate(
-        ({ count, promised }) => {
+        ({ count, promised, seed }) => {
             if (BASE_DRIVERS < count * 2) throw new Error(`활동 멤버가 ${BASE_DRIVERS}명뿐입니다`);
             const members = [...Array(BASE_DRIVERS).keys()];
             const shuffle = list => {
@@ -82,11 +86,11 @@ try {
             chosen = new Set(ids);
             document.getElementById('laps').value = '1';
             syncSelection();
-            if (!start()) throw new Error('경기를 시작하지 못했습니다');
+            if (!start(seed)) throw new Error('경기를 시작하지 못했습니다');
             document.getElementById('cinema').click(); // 화면 확대(중계 카메라 4배)
             return { lineup: ids.map(i => names[i]), next: nextIds.map(i => names[i]) };
         },
-        { count: RACERS, promised }
+        { count: RACERS, promised, seed }
     );
     // 시상 창이 뜨면 경기 화면 가운데로 옮기고, 버튼 줄(다시 경기·나가기 등) 자리에 다음 경기 안내를 넣는다
     // (녹화하는 이 창에서만 바꾼다)
@@ -166,6 +170,7 @@ try {
     const info = {
         publish_at: publishAt.toISOString(),
         laps: 1,
+        seed,
         lineup,
         results,
         next: { at: nextAt.toISOString(), lineup: next },
@@ -173,10 +178,8 @@ try {
         bytes: size,
     };
     await fs.writeFile(path.join(out, 'latest.json'), JSON.stringify(info, null, 2) + '\n');
-    console.log(
-        `${kst(publishAt)} 경기 ${lineup.join(', ')}${promised ? '(예고대로)' : ''} → 1위 ${results[0]?.name} · ` +
-            `${shot}장 · ${(size / 1e6).toFixed(2)}MB · 다음 ${kst(nextAt)} ${next.join(', ')}`
-    );
+    // 순위·우승자는 찍지 않는다(정각 전 실행 기록으로 결과가 새지 않게)
+    console.log(`${kst(publishAt)} 경기 녹화 완료 · ${shot}장 · ${(size / 1e6).toFixed(2)}MB`);
 } finally {
     await browser.close();
     await fs.rm(frames, { recursive: true, force: true });
