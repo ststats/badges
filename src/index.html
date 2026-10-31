@@ -203,6 +203,23 @@
                         { img: 'staruniv/calendar.png', label: '이번 달 일정', goes: '링크 없음', wide: true },
                     ],
                 },
+                {
+                    // 10분마다 정각에 새 경기(scripts/rider-race.mjs). 부제는 latest.json의 다음 경기로 바꾼다.
+                    key: 'rider',
+                    theme: 'star',
+                    name: '캄몬라이더',
+                    sub: '10분마다 정각에 새 경기 · 활동 멤버 3명 · 1바퀴',
+                    action: { href: 'https://staruniv.vercel.app/tools/?view=rider', label: '캄몬라이더 →' },
+                    badges: [
+                        {
+                            img: 'rider/latest.webp',
+                            label: '최신 경기',
+                            goes: '누르면 캄몬라이더',
+                            link: 'https://staruniv.vercel.app/tools/?view=rider',
+                            wide: true,
+                        },
+                    ],
+                },
             ];
 
             const esc = s =>
@@ -276,6 +293,22 @@
                 .catch(() => {
                     $('member-error').textContent = '멤버 목록 조회 실패 · 새로고침해 주세요';
                 });
+
+            fetch('/rider/latest.json', { cache: 'no-store' })
+                .then(r => (r.ok ? r.json() : null))
+                .then(info => {
+                    if (!info?.next?.lineup?.length) return;
+                    const time = new Date(info.next.at).toLocaleTimeString('ko-KR', {
+                        timeZone: 'Asia/Seoul',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false,
+                    });
+                    GROUPS.find(g => g.key === 'rider').sub = `다음 경기 ${time} · ${info.next.lineup.join(' · ')}`;
+                    renderGroups();
+                    applyLogo();
+                })
+                .catch(() => {});
 
             let toastTimer = 0;
             const toast = text => {

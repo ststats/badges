@@ -7,9 +7,16 @@ import img from '../api/img.js';
 import status from '../api/status.js';
 import save from '../api/save.js';
 import members from '../api/members.js';
+import rider from '../api/rider.js';
 
 const vercel = JSON.parse(await fs.readFile(path.join(root, 'vercel.json'), 'utf-8'));
-const handlers = { '/api/img': img, '/api/status': status, '/api/save': save, '/api/members': members };
+const handlers = {
+    '/api/img': img,
+    '/api/status': status,
+    '/api/save': save,
+    '/api/members': members,
+    '/api/rider': rider,
+};
 const toRegex = src =>
     new RegExp(
         '^' +
