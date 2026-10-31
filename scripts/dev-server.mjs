@@ -7,7 +7,7 @@ import img from '../api/img.js';
 import status from '../api/status.js';
 import save from '../api/save.js';
 import members from '../api/members.js';
-import rider from '../api/rider.js';
+import middleware, { config as middlewareConfig } from '../middleware.js';
 
 const vercel = JSON.parse(await fs.readFile(path.join(root, 'vercel.json'), 'utf-8'));
 const handlers = {
@@ -15,7 +15,6 @@ const handlers = {
     '/api/status': status,
     '/api/save': save,
     '/api/members': members,
-    '/api/rider': rider,
 };
 const toRegex = src =>
     new RegExp(
@@ -35,6 +34,15 @@ const types = {
 
 http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
+    // middleware.js(캄몬라이더 최신 경기): 미들웨어가 정한 주소를 받아 그대로 전한다
+    if (middlewareConfig.matcher.includes(url.pathname)) {
+        const target = (await middleware(new Request(url))).headers.get('x-middleware-rewrite');
+        const upstream = await fetch(target);
+        res.writeHead(upstream.status, {
+            'Content-Type': upstream.headers.get('content-type') || 'application/octet-stream',
+        });
+        return res.end(Buffer.from(await upstream.arrayBuffer()));
+    }
     for (const r of vercel.redirects)
         if (toRegex(r.source).test(url.pathname)) return res.writeHead(307, { Location: r.destination }).end();
     for (const r of vercel.rewrites) {

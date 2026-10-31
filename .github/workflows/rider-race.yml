@@ -2,7 +2,7 @@ name: 캄몬라이더 경기
 
 # api/rider-tick.js가 10분마다 띄운다(pg_cron → supabase/rider-tick.sql). 저장소 변수 RIDER_RACE_ENABLED=false면 멈춘다.
 # 정각 8분 전에 떠서 미리 녹화하고, 다음 10분 정각(latest.json의 publish_at)에 rider-race 브랜치에 올린다.
-# 브랜치에는 latest.webp·latest.json 한 벌만 덮어 올린다(기록을 쌓지 않는다). 주소는 /rider/latest.webp(api/rider.js).
+# 브랜치에는 latest.webp·latest.json 한 벌만 덮어 올린다(기록을 쌓지 않는다). 주소는 /rider/latest.webp(middleware.js).
 on:
   workflow_dispatch:
 
