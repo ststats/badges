@@ -93,6 +93,24 @@ try {
         },
         { count: RACERS, promised, seed }
     );
+    // 경기 화면 위 칩 줄(트랙·바퀴·시간)에 이 경기의 회차(공개 시각)를 붙인다(녹화하는 이 창에서만)
+    const day = new Intl.DateTimeFormat('ko-KR', { timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric' })
+        .formatToParts(publishAt)
+        .filter(p => p.type === 'month' || p.type === 'day')
+        .map(p => p.value)
+        .join('/');
+    await page.evaluate(
+        text => {
+            const like = document.getElementById('lapLabel'),
+                look = getComputedStyle(like),
+                chip = document.createElement('span');
+            chip.textContent = text;
+            for (const key of ['background', 'color', 'borderRadius', 'boxShadow', 'padding', 'font', 'border'])
+                chip.style[key] = look[key];
+            document.getElementById('timer').after(chip);
+        },
+        `${day} ${kst(publishAt)} 경기`
+    );
     // 시상 창이 뜨면 경기 화면 가운데로 옮기고, 버튼 줄(다시 경기·나가기 등) 자리에 다음 경기 안내를 넣는다
     // (녹화하는 이 창에서만 바꾼다)
     const announce = text =>
