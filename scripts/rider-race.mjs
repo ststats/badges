@@ -145,7 +145,7 @@ try {
             .sort((a, b) => a.place - b.place)
             .map(r => ({ place: r.place, name: r.name, time: r.finish == null ? null : +r.finish.toFixed(2) }))
     );
-    // 바뀐 부분만 담는 움짤 WebP(libwebp_anim). 무한 반복
+    // 바뀐 부분만 담는 움짤 WebP(libwebp_anim). 한 번만 재생하고 마지막 장면(시상·다음 경기 안내)에서 멈춘다
     execFileSync(process.env.FFMPEG || 'ffmpeg', [
         '-v',
         'error',
@@ -163,7 +163,7 @@ try {
         '-compression_level',
         '4', // 6은 인코딩이 8배 느린데(약 110초) 크기는 3%만 작다
         '-loop',
-        '0',
+        '1', // 재생 횟수(0이면 무한 반복)
         '-an',
         path.join(out, 'latest.webp'),
     ]);
