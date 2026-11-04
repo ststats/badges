@@ -2,7 +2,7 @@ name: 캄몬라이더 경기
 
 # api/rider-tick.js가 10분마다 띄운다(pg_cron → supabase/rider-tick.sql). 저장소 변수 RIDER_RACE_ENABLED=false면 멈춘다.
 # 정각 8분 전에 떠서 미리 녹화하고, 다음 10분 정각(latest.json의 publish_at)에 rider-race 브랜치에 올린다
-# (파일은 90초 전에 rider-race-next로 미리 올려 둔다).
+# (파일은 90초 전에 rider-race-next로 미리 올려 두고, 정각에는 API로 브랜치가 가리키는 커밋만 바꾼다).
 # 브랜치에는 latest.webp·latest.json 한 벌만 덮어 올린다(기록을 쌓지 않는다). 주소는 /rider/latest.webp(middleware.js).
 on:
   workflow_dispatch:
@@ -69,6 +69,7 @@ jobs:
         working-directory: out
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           printf '{ "git": { "deploymentEnabled": false } }\n' > vercel.json
           printf '캄몬라이더 최신 경기. 10분마다 덮어씁니다(.github/workflows/rider-race.yml).\n' > README.md
@@ -91,12 +92,19 @@ jobs:
             done
             return 1
           }
-          # 19MB 업로드가 가끔 1분 넘게 걸려(평소 3초) 정각 90초 전에 rider-race-next에 미리 올리고,
-          # 정각 2초 전에는 이미 올라간 커밋을 rider-race가 가리키게만 바꾼다(보낼 파일이 없어 1~2초)
+          # 19MB 업로드가 가끔 1분 넘게 걸려(평소 3초) 정각 90초 전에 rider-race-next에 미리 올린다
           until_before 90000
           push rider-race:rider-race-next
-          until_before 2000
-          push rider-race:rider-race
+          echo "미리 올림 끝 $(date -u +%T.%N | cut -c1-12)"
+          # git push는 보낼 파일이 없어도 가끔 20초 넘게 걸려, 정각에는 API로 rider-race가 그 커밋을 가리키게만 바꾼다
+          sha=$(git rev-parse HEAD)
+          until_before 1000
+          for i in 1 2 3; do
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/heads/rider-race" -f sha="$sha" -F force=true > /dev/null && break
+            [ "$i" = 3 ] && exit 1
+            echo "공개 실패, 다시 시도(${i})"; sleep 1
+          done
+          echo "공개 $(date -u +%T.%N | cut -c1-12)"
       # 하루 144번 쌓이는 기록을 정리한다. 실패한 회차는 원인을 볼 수 있게 남긴다.
       - name: 지난 녹화 기록 지우기
         env:
