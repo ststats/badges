@@ -1,7 +1,8 @@
 name: 캄몬라이더 경기
 
 # api/rider-tick.js가 10분마다 띄운다(pg_cron → supabase/rider-tick.sql). 저장소 변수 RIDER_RACE_ENABLED=false면 멈춘다.
-# 정각 8분 전에 떠서 미리 녹화하고, 다음 10분 정각(latest.json의 publish_at)에 rider-race 브랜치에 올린다.
+# 정각 8분 전에 떠서 미리 녹화하고, 다음 10분 정각(latest.json의 publish_at)에 rider-race 브랜치에 올린다
+# (파일은 90초 전에 rider-race-next로 미리 올려 둔다).
 # 브랜치에는 latest.webp·latest.json 한 벌만 덮어 올린다(기록을 쌓지 않는다). 주소는 /rider/latest.webp(middleware.js).
 on:
   workflow_dispatch:
@@ -74,16 +75,28 @@ jobs:
           git init -q -b rider-race
           git add .
           git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -qm 'Latest race'
-          # 올리는 데 3초쯤 걸려 정각 3초 전에 올리기 시작한다(이미 지났으면 바로)
-          wait=$(node -p "Math.max(0, (Date.parse(require('./latest.json').publish_at) - 3000 - Date.now()) / 1000).toFixed(3)")
-          echo "정각 3초 전까지 ${wait}초 기다림"
-          sleep "$wait"
+          remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          # 정각 ms 전까지 기다린다(이미 지났으면 바로)
+          until_before() {
+            local wait
+            wait=$(node -p "Math.max(0, (Date.parse(require('./latest.json').publish_at) - $1 - Date.now()) / 1000).toFixed(3)")
+            echo "정각 $(($1 / 1000))초 전까지 ${wait}초 기다림"
+            sleep "$wait"
+          }
           # GitHub가 가끔 Internal Server Error로 받지 않아 2초 뒤 두 번까지 다시 올린다
-          for i in 1 2 3; do
-            git push -qf "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" rider-race && exit 0
-            [ "$i" = 3 ] || { echo "올리기 실패, 다시 올림(${i})"; sleep 2; }
-          done
-          exit 1
+          push() {
+            for i in 1 2 3; do
+              git push -qf "$remote" "$1" && return 0
+              [ "$i" = 3 ] || { echo "올리기 실패, 다시 올림(${i})"; sleep 2; }
+            done
+            return 1
+          }
+          # 19MB 업로드가 가끔 1분 넘게 걸려(평소 3초) 정각 90초 전에 rider-race-next에 미리 올리고,
+          # 정각 2초 전에는 이미 올라간 커밋을 rider-race가 가리키게만 바꾼다(보낼 파일이 없어 1~2초)
+          until_before 90000
+          push rider-race:rider-race-next
+          until_before 2000
+          push rider-race:rider-race
       # 하루 144번 쌓이는 기록을 정리한다. 실패한 회차는 원인을 볼 수 있게 남긴다.
       - name: 지난 녹화 기록 지우기
         env:
