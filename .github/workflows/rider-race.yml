@@ -1,0 +1,108 @@
+name: 캄몬라이더 경기
+
+# api/rider-tick.js가 10분마다 띄운다(pg_cron → supabase/rider-tick.sql). 저장소 변수 RIDER_RACE_ENABLED=false면 멈춘다.
+# 정각 8분 전에 떠서 미리 녹화하고, 다음 10분 정각(latest.json의 publish_at)에 rider-race 브랜치에 올린다
+# (파일은 90초 전에 rider-race-next로 미리 올려 두고, 정각에는 API로 브랜치가 가리키는 커밋만 바꾼다).
+# 브랜치에는 latest.webp·latest.json 한 벌만 덮어 올린다(기록을 쌓지 않는다). 주소는 /rider/latest.webp(middleware.js).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write # 지난 녹화 기록 정리
+
+concurrency:
+  group: rider-race
+  cancel-in-progress: false
+
+jobs:
+  race:
+    if: vars.RIDER_RACE_ENABLED != 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      # 중간에 끊고 다시 받으면 남은 apt가 잠금을 쥐고 있어 다시 받기가 바로 실패한다. 느려도 끝까지 기다린다
+      - name: 브라우저 설치
+        run: npx playwright install --with-deps chromium
+      # 움짤 WebP 인코더(libwebp_anim)가 든 ffmpeg 정적 빌드(버전 고정·체크섬 확인).
+      # 매번 apt로 설치하면 설치 서버가 가끔 10분 넘게 멈춰 회차를 놓쳐 한 번 받아 캐시로 쓴다.
+      - name: ffmpeg 캐시
+        id: ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: ~/.ffmpeg
+          key: ffmpeg-static-b6.0-ed652b2f
+      - name: ffmpeg 받기
+        if: steps.ffmpeg.outputs.cache-hit != 'true'
+        timeout-minutes: 3
+        run: |
+          mkdir -p ~/.ffmpeg
+          for i in 1 2 3; do
+            curl -fsSL --max-time 60 -o ~/.ffmpeg/ffmpeg.gz \
+              https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0/ffmpeg-linux-x64.gz && break
+            sleep 5
+          done
+          gunzip -f ~/.ffmpeg/ffmpeg.gz
+          echo "ed652b2f32e0851d1946894fb8333f5b677c1b2ce6b9d187910a67f8b99da028  $HOME/.ffmpeg/ffmpeg" | sha256sum -c -
+          chmod +x ~/.ffmpeg/ffmpeg
+      - run: ~/.ffmpeg/ffmpeg -hide_banner -encoders | grep -q libwebp_anim && echo "FFMPEG=$HOME/.ffmpeg/ffmpeg" >> "$GITHUB_ENV"
+      # 지난 회차가 예고한 다음 경기 후보(없으면 새로 뽑는다)
+      - run: |
+          curl -fsS -H "Authorization: Bearer ${GITHUB_TOKEN}" -H 'Accept: application/vnd.github.raw' \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/latest.json?ref=rider-race" -o prev.json || echo '{}' > prev.json
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - run: node scripts/rider-race.mjs out prev.json
+      - name: rider-race 브랜치에 올리기
+        working-directory: out
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          printf '{ "git": { "deploymentEnabled": false } }\n' > vercel.json
+          printf '캄몬라이더 최신 경기. 10분마다 덮어씁니다(.github/workflows/rider-race.yml).\n' > README.md
+          git init -q -b rider-race
+          git add .
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -qm 'Latest race'
+          remote="https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          # 정각 ms 전까지 기다린다(이미 지났으면 바로)
+          until_before() {
+            local wait
+            wait=$(node -p "Math.max(0, (Date.parse(require('./latest.json').publish_at) - $1 - Date.now()) / 1000).toFixed(3)")
+            echo "정각 $(($1 / 1000))초 전까지 ${wait}초 기다림"
+            sleep "$wait"
+          }
+          # GitHub가 가끔 Internal Server Error로 받지 않아 2초 뒤 두 번까지 다시 올린다
+          push() {
+            for i in 1 2 3; do
+              git push -qf "$remote" "$1" && return 0
+              [ "$i" = 3 ] || { echo "올리기 실패, 다시 올림(${i})"; sleep 2; }
+            done
+            return 1
+          }
+          # 19MB 업로드가 가끔 1분 넘게 걸려(평소 3초) 정각 90초 전에 rider-race-next에 미리 올린다
+          until_before 90000
+          push rider-race:rider-race-next
+          echo "미리 올림 끝 $(date -u +%T.%N | cut -c1-12)"
+          # git push는 보낼 파일이 없어도 가끔 20초 넘게 걸려, 정각에는 API로 rider-race가 그 커밋을 가리키게만 바꾼다
+          sha=$(git rev-parse HEAD)
+          until_before 1000
+          for i in 1 2 3; do
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/heads/rider-race" -f sha="$sha" -F force=true > /dev/null && break
+            [ "$i" = 3 ] && exit 1
+            echo "공개 실패, 다시 시도(${i})"; sleep 1
+          done
+          echo "공개 $(date -u +%T.%N | cut -c1-12)"
+      # 하루 144번 쌓이는 기록을 정리한다. 실패한 회차는 원인을 볼 수 있게 남긴다.
+      - name: 지난 녹화 기록 지우기
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/rider-race.yml/runs?status=success&per_page=100" --jq '.workflow_runs[].id' |
+            while read -r id; do gh api -X DELETE "repos/${GITHUB_REPOSITORY}/actions/runs/${id}" > /dev/null || true; done

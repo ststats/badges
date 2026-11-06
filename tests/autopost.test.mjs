@@ -1,0 +1,376 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+    collectPosts,
+    newPosts,
+    postingCandidates,
+    publishPosts,
+    recoverPending,
+    postTime,
+    articleBody,
+    articleSubject,
+    noticeCategoryCode,
+    categoryName,
+    postingKey,
+    boardName,
+} from '../src/autopost.mjs';
+import { fullContent, noticeDocument } from '../src/notice-document.mjs';
+
+const post = (id, date = '2026-10-12 12:00:00') => ({
+    titleNo: id,
+    userId: 'member01',
+    regDate: date,
+    titleName: '제목',
+    content: { content: '<p>전체 본문</p>' },
+    photos: [],
+});
+const state = () => ({ version: 1, since: postTime(post(1)) - 1000, done: {} });
+
+test('등록 키는 같은 게시판·원문에 고정되고 다른 원문·게시판과 구분된다', () => {
+    assert.equal(postingKey('pan_a', 209610437), postingKey('pan_a', '209610437'));
+    assert.match(postingKey('pan_a', 209610437), /^[a-f0-9]{64}$/);
+    assert.notEqual(postingKey('pan_a', 209610437), postingKey('pan_a', 209610438));
+    assert.notEqual(postingKey('pan_a', 209610437), postingKey('pan_b', 209610437));
+    for (const id of ['', 0, -1, '01', '1.0', undefined]) assert.throws(() => postingKey('pan_a', id));
+    assert.throws(() => postingKey('../x', 1));
+});
+
+test('와고 게시판은 주소나 이름에서 이름만 받는다', () => {
+    for (const input of [
+        'pan_a1',
+        ' pan_a1 ',
+        'https://ygosu.com/board/pan_a1',
+        'https://www.ygosu.com/board/pan_a1/?mode=write',
+    ])
+        assert.equal(boardName(input), 'pan_a1');
+    for (const input of ['', 'https://evil.example/board/pan_a1', 'pan a', '../pan', 'a'])
+        assert.equal(boardName(input), null);
+});
+
+test('본문 co.kr와 첨부 com의 같은 사진은 추가하지 않고 다른 사진은 보존한다', () => {
+    const p = post(1);
+    p.content.content = '<p>앞</p><img src="https://stimg.sooplive.co.kr/NORMAL_BBS/4/owner/photo.jpeg"><p>뒤</p>';
+    p.photos = [
+        { url: 'https://stimg.sooplive.com/NORMAL_BBS/4/owner/photo.jpeg' },
+        { url: 'https://stimg.sooplive.com/NORMAL_BBS/4/other/photo.jpeg' },
+        { url: 'https://stimg.sooplive.co.kr/NORMAL_BBS/4/other/photo.jpeg' },
+    ];
+    const html = fullContent(p);
+    assert.equal((html.match(/<img /g) || []).length, 2);
+    assert.ok(html.includes('https://stimg.sooplive.co.kr/NORMAL_BBS/4/owner/photo.jpeg'));
+    assert.ok(
+        html.indexOf('앞') < html.indexOf('/owner/photo.jpeg') && html.indexOf('/owner/photo.jpeg') < html.indexOf('뒤')
+    );
+    assert.ok(html.includes('/other/photo.jpeg'));
+});
+
+test('복구는 지정한 pending 하나만 보내고 오류가 나면 잠금을 유지한다', async () => {
+    const s = state();
+    const now = Date.now();
+    s.pending = { id: '1', at: new Date(now - 1000).toISOString() };
+    const args = { state: s, posts: [post(1), post(2)], now: () => now, prepare: async () => [], save: async () => {} };
+    await assert.rejects(recoverPending({ ...args, id: '2', publish: () => assert.fail() }), /번호 불일치/);
+    await assert.rejects(
+        recoverPending({
+            ...args,
+            id: '1',
+            publish: async p => {
+                assert.equal(p.titleNo, 1);
+                throw Error('HTTP 400');
+            },
+        })
+    );
+    assert.equal(s.pending.id, '1');
+    assert.throws(() => newPosts(s, [post(2)]), /자동 재전송/);
+    await assert.rejects(
+        recoverPending({ ...args, id: '1', now: () => now + 60 * 60000, publish: () => assert.fail() }),
+        /시간 초과/
+    );
+    await recoverPending({
+        ...args,
+        id: '1',
+        publish: async p => {
+            assert.equal(p.titleNo, 1);
+            return 900;
+        },
+    });
+    assert.equal(s.done['1'], 900);
+    assert.equal(s.done['2'], undefined);
+    assert.equal(s.pending, undefined);
+});
+
+test('공지 카테고리는 같은 게시판의 실제 분류 링크에서만 읽는다', () => {
+    assert.equal(
+        noticeCategoryCode(
+            [
+                { text: '공지', href: '/board/other/?s_category=Cwrong' },
+                { text: '공지사항', href: '/board/notice' },
+                { text: '공지', href: 'https://evil.example/board/pan_member01/?s_category=Cwrong' },
+                { text: ' 공지 ', href: '/board/pan_member01/?s_category=C6a50b533b88545.30004058' },
+            ],
+            'pan_member01'
+        ),
+        'C6a50b533b88545.30004058'
+    );
+    // '공지' 분류가 없는 게시판은 분류 없이 올린다
+    assert.equal(noticeCategoryCode([{ text: '공지', href: '/board/other/?s_category=Cx' }], 'pan_member01'), null);
+});
+
+test('분류 이름을 정하면 게시판의 그 이름 분류를 쓰고, 비우면 공지다', () => {
+    const links = [
+        { text: '공지', href: '/board/pan_member01/?s_category=Cnotice' },
+        { text: '방송공지', href: '/board/pan_member01/?s_category=Cbroad' },
+    ];
+    assert.equal(noticeCategoryCode(links, 'pan_member01', '방송공지'), 'Cbroad');
+    assert.equal(noticeCategoryCode(links, 'pan_member01'), 'Cnotice');
+    assert.equal(noticeCategoryCode(links, 'pan_member01', '일정'), null);
+    assert.equal(categoryName('  방송공지 '), '방송공지');
+    assert.equal(categoryName(''), null);
+    assert.equal(categoryName('가'.repeat(21)), undefined);
+    assert.equal(categoryName('공\n지'), undefined);
+});
+
+test('와고 제목은 원문 공지 날짜의 YYMMDD 멤버 이름 공지 형식이다', () => {
+    assert.equal(articleSubject(post(1), '멤버A'), '261012 멤버A 공지');
+    assert.equal(articleSubject(post(2, '2025-12-31 23:59:59'), '멤버B'), '251231 멤버B 공지');
+    assert.throws(() => articleSubject({ regDate: '' }, '멤버A'), /날짜/);
+});
+
+test('초기 테스트는 기준 이전 최신 하나만 등록하고 재실행해도 다른 과거 글을 올리지 않는다', async () => {
+    const s = { version: 1, since: Date.now(), done: { '1': 'baseline', '2': 'baseline', '3': 'baseline' } };
+    const posts = [post(1), post(3), post(2)];
+    assert.equal(newPosts(s, posts).length, 0);
+    const sent = [];
+    const args = {
+        state: s,
+        posts,
+        includeLatest: true,
+        prepare: async p => {
+            sent.push(p.titleNo);
+            return [];
+        },
+        save: async () => {},
+        publish: async () => 901,
+        now: () => 1000000,
+    };
+    await publishPosts(args);
+    assert.deepEqual(sent, [3]);
+    assert.equal(s.done['3'], 901);
+    assert.equal(s.done['2'], 'baseline');
+    assert.equal(postingCandidates(s, posts, true).length, 0);
+    await publishPosts({ ...args, now: () => 2000000 });
+    assert.deepEqual(sent, [3]);
+    s.pending = { id: '4' };
+    assert.throws(() => postingCandidates(s, posts, true), /확인 필요/);
+});
+
+test('첫 페이지와 고정글을 중복 제거하고 과거 페이지는 조회하지 않는다', async () => {
+    const pages = [];
+    const p = post(2);
+    const result = await collectPosts({
+        soopId: 'member01',
+        cookie: 'auth=test',
+        fetcher: async (url, opts) => {
+            if (!opts.headers) return { ok: true, json: async () => ({ contents: [], noticeData: [] }) };
+            assert.equal(opts.headers.Cookie, 'auth=test');
+            const page = Number(url.searchParams.get('page'));
+            pages.push(page);
+            return {
+                ok: true,
+                json: async () => ({
+                    contents: page === 1 ? [p] : [post(1, '2026-10-01 00:00:00')],
+                    noticeData: [p],
+                    meta: { totalPages: 3 },
+                }),
+            };
+        },
+    });
+    assert.deepEqual(
+        result.map(p => p.titleNo),
+        [2]
+    );
+    assert.deepEqual(pages, [1]);
+});
+
+test('쿠키가 없거나 SOOP이 쿠키를 거절하면 공개 글을 받는다', async () => {
+    const publicBoard = { ok: true, json: async () => ({ contents: [post(1)] }) };
+    const noCookie = await collectPosts({
+        soopId: 'member01',
+        cookie: '',
+        fetcher: async (_url, opts) => {
+            assert.equal(opts.headers.Cookie, undefined);
+            return publicBoard;
+        },
+    });
+    assert.deepEqual(
+        noCookie.map(p => p.titleNo),
+        [1]
+    );
+    const calls = [];
+    const rejected = await collectPosts({
+        soopId: 'member01',
+        cookie: 'expired',
+        fetcher: async (_url, opts) => {
+            calls.push(opts.headers.Cookie || 'public');
+            return opts.headers.Cookie ? { ok: false, status: 500 } : publicBoard;
+        },
+    });
+    assert.deepEqual(
+        rejected.map(p => p.titleNo),
+        [1]
+    );
+    assert.deepEqual(calls, ['expired', 'expired', 'public']);
+    await assert.rejects(
+        collectPosts({ soopId: 'member01', cookie: '', fetcher: async () => ({ ok: false, status: 503 }) }),
+        /SOOP 게시판 HTTP 503/
+    );
+    await assert.rejects(collectPosts({ soopId: '../x', cookie: '', fetcher: () => assert.fail() }), /SOOP ID/);
+});
+
+test('등록 전 pending을 영구 저장하고 이미 처리한 글은 건너뛴다', async () => {
+    const s = state();
+    s.done['1'] = 123;
+    const events = [];
+    await publishPosts({
+        state: s,
+        posts: [post(1), post(2)],
+        prepare: async p => {
+            events.push(`prepare:${p.titleNo}`);
+            return [];
+        },
+        save: async s => {
+            events.push(s.pending ? 'pending' : 'done');
+        },
+        publish: async () => {
+            events.push('publish');
+            return 456;
+        },
+    });
+    assert.deepEqual(events, ['prepare:2', 'pending', 'publish', 'done']);
+    assert.equal(s.done['2'], 456);
+});
+
+test('상태 저장 실패 시 전송하지 않고, 전송 응답 불명 시 다음 실행도 멈춘다', async () => {
+    const s = state();
+    await assert.rejects(
+        publishPosts({
+            state: s,
+            posts: [post(1)],
+            prepare: async () => [],
+            save: async () => {
+                throw Error('DB');
+            },
+            publish: () => assert.fail(),
+        })
+    );
+    assert.throws(() => newPosts(s, [post(1)]), /확인 필요/);
+    const t = state();
+    await assert.rejects(
+        publishPosts({
+            state: t,
+            posts: [post(1)],
+            prepare: async () => [],
+            save: async () => {},
+            publish: async () => {
+                throw Error('timeout');
+            },
+        })
+    );
+    assert.throws(() => newPosts(t, [post(1)]), /자동 재전송/);
+});
+
+test('준비 실패 시 pending을 만들지 않아 재실행할 수 있다', async () => {
+    const s = state();
+    await assert.rejects(
+        publishPosts({
+            state: s,
+            posts: [post(1)],
+            prepare: async () => {
+                throw Error('image');
+            },
+            save: () => assert.fail(),
+            publish: () => assert.fail(),
+        })
+    );
+    assert.equal(newPosts(s, [post(1)]).length, 1);
+});
+
+test('밀린 글 100개도 최신 하나만 전송하고 나머지는 영구적으로 건너뛴다', async () => {
+    const s = state();
+    const posts = Array.from({ length: 100 }, (_, i) => post(i + 1));
+    const sent = [];
+    const snapshots = [];
+    await publishPosts({
+        state: s,
+        posts,
+        prepare: async p => {
+            sent.push(p.titleNo);
+            return [];
+        },
+        save: async v => {
+            snapshots.push(structuredClone(v));
+        },
+        publish: async () => 900,
+        now: () => 1000000,
+    });
+    assert.deepEqual(sent, [100]);
+    assert.equal(s.done['100'], 900);
+    assert.equal(s.done['99'], 'skipped');
+    assert.equal(snapshots[0].done['1'], 'skipped');
+    assert.equal(snapshots[0].pending.at, new Date(1000000).toISOString());
+    assert.equal(newPosts(s, posts).length, 0);
+    // 재실행/수동 실행에서도 5분 안에는 추가 등록하지 않는다.
+    await publishPosts({
+        state: s,
+        posts: [post(101)],
+        prepare: () => assert.fail(),
+        save: () => assert.fail(),
+        publish: () => assert.fail(),
+        now: () => 1000001,
+    });
+    assert.equal(s.done['101'], undefined);
+    await publishPosts({
+        state: s,
+        posts: [post(101)],
+        prepare: async () => [],
+        save: async () => {},
+        publish: async () => 901,
+        now: () => 1300000,
+    });
+    assert.equal(s.done['101'], 901);
+});
+
+test('긴 제목/100문단/사진 7장을 모두 포함하고 위험한 HTML은 제거한다', async () => {
+    const p = post(1);
+    p.titleName = '긴 제목 '.repeat(40);
+    p.content.content =
+        Array.from({ length: 100 }, (_, i) => `<p>본문 ${i} 끝</p>`).join('') + '<script>alert(1)</script>';
+    p.photos = Array.from({ length: 7 }, (_, i) => ({ url: `https://stimg.sooplive.co.kr/${i}.png` }));
+    const html = await noticeDocument({ name: '멤버A', post: p });
+    assert.ok(html.includes(p.titleName));
+    assert.ok(html.includes('본문 99 끝'));
+    assert.equal((html.match(/alt="첨부 사진"/g) || []).length, 7);
+    assert.ok(!html.includes('alert(1)'));
+    assert.ok(!html.includes('line-clamp'));
+    const body = articleBody('member01', p, [
+        { fileUrl: 'https://storage2.ygosu.com/?code=Stest.123', code: 'Stest.123', part: '1/1' },
+    ]);
+    assert.ok(body.includes('/post/1'));
+    assert.ok(body.includes('data-storage-code="Stest.123"'));
+    assert.match(body, /<a href="https:[^"]*\/post\/1"[^>]*>원문 링크 ↗<\/a>/);
+    assert.ok(!/<a[^>]*><img /.test(body));
+    assert.ok(!body.includes('SOOP 원문 보기'));
+    assert.throws(
+        () =>
+            articleBody('member01', p, [
+                { fileUrl: 'https://storage2.ygosu.com/?code=Sother', code: 'Stest.123', part: '1/1' },
+            ]),
+        /첨부 코드 불일치/
+    );
+});
+
+test('요약뿐인 글/누락 사진/영상은 생략한 채 게시하지 않는다', () => {
+    assert.throws(() => fullContent({ content: { textContent: '요약...' } }), /전체 본문/);
+    assert.throws(() => fullContent({ content: { content: '<img src="http://localhost/private">' } }), /중단/);
+    assert.throws(() => fullContent({ content: { content: '<video src="https://a.com/a.mp4"></video>' } }), /영상/);
+});
