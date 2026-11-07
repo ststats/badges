@@ -27,9 +27,9 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
-      # 중간에 끊고 다시 받으면 남은 apt가 잠금을 쥐고 있어 다시 받기가 바로 실패한다. 느려도 끝까지 기다린다
+      # 브라우저만 받는다. 시스템 라이브러리는 ubuntu-24.04 러너에 이미 있다(--with-deps의 apt가 가끔 9분 넘게 걸려 회차를 놓쳤다)
       - name: 브라우저 설치
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
       # 움짤 WebP 인코더(libwebp_anim)가 든 ffmpeg 정적 빌드(버전 고정·체크섬 확인).
       # 매번 apt로 설치하면 설치 서버가 가끔 10분 넘게 멈춰 회차를 놓쳐 한 번 받아 캐시로 쓴다.
       - name: ffmpeg 캐시
