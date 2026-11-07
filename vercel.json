@@ -1,0 +1,58 @@
+{
+    "regions": [
+        "icn1"
+    ],
+    "buildCommand": "node scripts/vercel-public.mjs",
+    "outputDirectory": "public",
+    "functions": {
+        "api/autopost-detect.js": {
+            "includeFiles": "{fonts/**,config.json}",
+            "memory": 1024,
+            "maxDuration": 60
+        },
+        "api/autopost-source.js": {
+            "includeFiles": "{fonts/**,config.json}",
+            "memory": 1024,
+            "maxDuration": 60
+        },
+        "api/*.js": {
+            "includeFiles": "{fonts/**,config.json}",
+            "memory": 1024,
+            "maxDuration": 20
+        }
+    },
+    "rewrites": [
+        {
+            "source": "/member/:id([a-zA-Z0-9_-]+)/schedule.:v([0-9a-f]{12}).png",
+            "destination": "/api/img?t=member&b=schedule&id=:id&v=:v"
+        },
+        {
+            "source": "/member/:id([a-zA-Z0-9_-]+)/schedule.png",
+            "destination": "/api/img?t=member&b=schedule&id=:id"
+        },
+        {
+            "source": "/:t(staruniv)/:b([a-z0-9-]+).:v([0-9a-f]{12}).png",
+            "destination": "/api/img?t=:t&b=:b&v=:v"
+        },
+        {
+            "source": "/:t(staruniv)/:b([a-z0-9-]+).png",
+            "destination": "/api/img?t=:t&b=:b"
+        },
+        {
+            "source": "/status",
+            "destination": "/api/status"
+        }
+    ],
+    "redirects": [
+        {
+            "source": "/edit",
+            "destination": "https://staruniv.vercel.app/schedule/",
+            "permanent": false
+        },
+        {
+            "source": "/edit/",
+            "destination": "https://staruniv.vercel.app/schedule/",
+            "permanent": false
+        }
+    ]
+}

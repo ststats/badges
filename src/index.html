@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="ko">
+    <head>
+        <!--head:뱃지 모음-->
+        <style>
+            .groups {
+                display: grid;
+                gap: 28px;
+                margin-top: 24px;
+            }
+            .group {
+                padding: 0;
+                overflow: hidden;
+            }
+            .group-head {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                flex-wrap: wrap;
+                padding: 20px 22px;
+                border-bottom: 1px solid rgba(24, 24, 27, 0.06);
+            }
+            .group[data-theme='member'] .group-head {
+                background: var(--pink);
+            }
+            .group[data-theme='star'] .group-head {
+                background: var(--sky);
+            }
+            .avatar {
+                width: 48px;
+                height: 48px;
+                border-radius: 48px;
+                object-fit: cover;
+                background: #fff;
+                border: 2.5px solid #fff;
+                box-shadow: 0 2px 8px rgba(24, 24, 27, 0.12);
+                flex: none;
+            }
+            .avatar.square {
+                border-radius: 14px;
+                object-fit: contain;
+                padding: 2px;
+            }
+            .group-name {
+                flex: 1;
+                min-width: 140px;
+            }
+            .group-name h2 {
+                margin: 0;
+                font-size: 22px;
+                letter-spacing: -0.03em;
+            }
+            .group-name p {
+                margin: 2px 0 0;
+                color: var(--body);
+                font-size: 13.5px;
+            }
+            .group-head .btn {
+                background: rgba(255, 255, 255, 0.8);
+            }
+            .group-head .btn:hover {
+                background: #fff;
+            }
+            .badges {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+                gap: 18px;
+                padding: 20px;
+                align-items: start;
+            }
+            .badge {
+                border: 1px solid var(--line);
+                border-radius: 16px;
+                overflow: hidden;
+                background: #fff;
+                display: flex;
+                flex-direction: column;
+            }
+            .badge.wide {
+                grid-column: 1 / -1;
+            }
+            .shot {
+                background: #f6f6f8;
+                display: flex;
+                justify-content: center;
+                padding: 12px;
+                min-height: 120px;
+            }
+            .shot img {
+                width: 100%;
+                height: auto;
+                display: block;
+            }
+            .badge.wide .shot img {
+                max-width: 900px;
+            }
+            .meta {
+                padding: 12px 14px 14px;
+                display: grid;
+                gap: 8px;
+                border-top: 1px solid var(--line);
+            }
+            .meta-row {
+                display: flex;
+                align-items: baseline;
+                gap: 8px;
+                flex-wrap: wrap;
+            }
+            .meta h3 {
+                margin: 0;
+                font-size: 15px;
+            }
+            .meta .goes {
+                font-size: 12.5px;
+                color: var(--sub);
+            }
+            .actions {
+                display: flex;
+                gap: 6px;
+                flex-wrap: wrap;
+            }
+            .how {
+                margin-top: 28px;
+                padding: 18px 22px;
+            }
+            .how h2 {
+                font-size: 16px;
+                margin: 0 0 6px;
+            }
+            .how ol {
+                margin: 0;
+                padding-left: 18px;
+                color: var(--body);
+                font-size: 14px;
+                line-height: 1.8;
+            }
+            @media (max-width: 560px) {
+                .group-head {
+                    padding: 16px;
+                }
+                .badges {
+                    padding: 12px;
+                    gap: 12px;
+                }
+                .shot {
+                    padding: 8px;
+                    min-height: 0;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <!--topbar:home-->
+        <main class="wrap">
+            <h1 class="page-title">뱃지 모음</h1>
+            <p class="lead">
+                커뮤니티 글에 이미지로 붙이면 볼 때마다 지금 내용으로 바뀌어요(최대 1분). <b>코드 복사</b>를 눌러
+                글쓰기의 HTML 편집에 붙여 넣으면 됩니다.
+            </p>
+            <label for="member-select">일정 뱃지 멤버</label>
+            <select id="member-select" class="btn" disabled>
+                <option>멤버를 불러오는 중…</option></select
+            ><span id="member-error" role="status"></span>
+            <div class="groups" id="groups"></div>
+            <section class="card how">
+                <h2>붙이는 법</h2>
+                <ol>
+                    <li>원하는 뱃지의 <b>코드 복사</b>를 누르기</li>
+                    <li>커뮤니티 글쓰기에서 <b>HTML 편집</b>(소스 보기)으로 바꾸고 붙여 넣기</li>
+                    <li>
+                        HTML 편집이 없는 곳이면 <b>이미지 주소</b>를 복사해 이미지로 넣기(이때는 클릭 링크가 연결되지
+                        않아요)
+                    </li>
+                </ol>
+            </section>
+        </main>
+        <div class="toast" id="toast" role="status" aria-live="polite"></div>
+        <script type="module">
+            const $ = id => document.getElementById(id);
+            const config = await fetch('/config.json', { cache: 'no-store' }).then(r => r.json());
+            const origin = location.origin;
+
+            // 뱃지 목록(그림 주소는 api/img.js와 같다). link가 없으면 누를 일이 없는 뱃지.
+            // 멤버 묶음은 멤버 목록을 받은 뒤 고른 멤버로 채운다.
+            const GROUPS = [
+                {
+                    key: 'member',
+                    theme: 'member',
+                    name: '멤버',
+                    sub: '주간 방송 일정',
+                    action: { href: 'https://staruniv.vercel.app/schedule/', label: '스타유니브 일정 →' },
+                    badges: [{ label: '주간 일정', goes: '누르면 방송국', wide: true }],
+                },
+                {
+                    key: 'staruniv',
+                    theme: 'star',
+                    name: config.staruniv.name,
+                    sub: '스타유니브 관리자 화면의 일정·휴방 그대로',
+                    square: true,
+                    action: { href: 'https://staruniv.vercel.app/schedule/', label: '스타유니브 일정 →' },
+                    badges: [
+                        { img: 'staruniv/today.png', label: '오늘의 일정', goes: '링크 없음', wide: true },
+                        { img: 'staruniv/calendar.png', label: '이번 달 일정', goes: '링크 없음', wide: true },
+                    ],
+                },
+                {
+                    // 10분마다 정각에 새 경기(scripts/rider-race.mjs). 부제는 latest.json의 다음 경기로 바꾼다.
+                    key: 'rider',
+                    theme: 'star',
+                    name: '캄몬라이더',
+                    sub: '10분마다 정각에 새 경기 · 활동 멤버 3명 · 1바퀴',
+                    action: { href: 'https://staruniv.vercel.app/tools/?view=rider', label: '캄몬라이더 →' },
+                    badges: [
+                        {
+                            img: 'rider/latest.webp',
+                            label: '최신 경기',
+                            goes: '누르면 캄몬라이더',
+                            link: 'https://staruniv.vercel.app/tools/?view=rider',
+                            wide: true,
+                        },
+                    ],
+                },
+            ];
+
+            const esc = s =>
+                String(s).replace(
+                    /[&<>"']/g,
+                    c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]
+                );
+            const codeOf = (g, b) => {
+                const image = `<img src="${origin}/${b.img}" alt="${esc(`${g.name} ${b.label}`)}">`;
+                return b.link
+                    ? `<a href="${b.link.startsWith('https://') ? b.link : `${origin}/${b.link}`}">${image}</a>`
+                    : image;
+            };
+
+            const renderGroups = () => {
+                $('groups').innerHTML = GROUPS.filter(g => g.badges.every(b => b.img))
+                    .map(
+                        g => `
+<section class="card group" data-theme="${g.theme}" data-key="${g.key}">
+  <div class="group-head">
+    <img class="avatar${g.square ? ' square' : ''}" alt="" ${g.avatar ? `src="${g.avatar}"` : 'hidden'}>
+    <div class="group-name"><h2>${esc(g.name)}</h2><p>${esc(g.sub)}</p></div>
+    <a class="btn small" href="${g.action.href}"${g.action.href.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}>${esc(g.action.label)}</a>
+  </div>
+  <div class="badges">${g.badges
+      .map(
+          (b, i) => `
+    <article class="badge${b.wide ? ' wide' : ''}">
+      <div class="shot"><img src="/${b.img}" alt="${esc(`${g.name} ${b.label}`)}" loading="lazy"></div>
+      <div class="meta">
+        <div class="meta-row"><h3>${esc(b.label)}</h3><span class="goes">${esc(b.goes)}</span></div>
+        <div class="actions">
+          <button class="btn small primary" type="button" data-copy="code" data-g="${g.key}" data-i="${i}">코드 복사</button>
+          <button class="btn small" type="button" data-copy="img" data-g="${g.key}" data-i="${i}">이미지 주소</button>
+          <a class="btn small" href="/${b.img}" target="_blank" rel="noopener">새 창</a>
+        </div>
+      </div>
+    </article>`
+      )
+      .join('')}
+  </div>
+</section>`
+                    )
+                    .join('');
+            };
+            renderGroups();
+
+            fetch('/api/members')
+                .then(async r => {
+                    if (!r.ok) throw new Error();
+                    const members = await r.json();
+                    const select = $('member-select');
+                    select.innerHTML = members
+                        .map(m => `<option value="${esc(m.soopId)}">${esc(m.name)}</option>`)
+                        .join('');
+                    select.disabled = !members.length;
+                    const update = () => {
+                        const m = members.find(m => m.soopId === select.value);
+                        if (!m) return;
+                        const g = GROUPS[0];
+                        g.name = m.name;
+                        g.avatar = `https://profile.img.sooplive.com/LOGO/${m.soopId.slice(0, 2)}/${m.soopId}/m/${m.soopId}.webp`;
+                        g.badges[0].img = `member/${encodeURIComponent(m.soopId)}/schedule.png`;
+                        g.badges[0].link = `https://www.sooplive.co.kr/station/${encodeURIComponent(m.soopId)}`;
+                        renderGroups();
+                        applyLogo();
+                    };
+                    select.addEventListener('change', update);
+                    update();
+                })
+                .catch(() => {
+                    $('member-error').textContent = '멤버 목록 조회 실패 · 새로고침해 주세요';
+                });
+
+            fetch('/rider/latest.json', { cache: 'no-store' })
+                .then(r => (r.ok ? r.json() : null))
+                .then(info => {
+                    if (!info?.next?.lineup?.length) return;
+                    const time = new Date(info.next.at).toLocaleTimeString('ko-KR', {
+                        timeZone: 'Asia/Seoul',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false,
+                    });
+                    GROUPS.find(g => g.key === 'rider').sub = `다음 경기 ${time} · ${info.next.lineup.join(' · ')}`;
+                    renderGroups();
+                    applyLogo();
+                })
+                .catch(() => {});
+
+            let toastTimer = 0;
+            const toast = text => {
+                $('toast').textContent = text;
+                $('toast').classList.add('show');
+                clearTimeout(toastTimer);
+                toastTimer = setTimeout(() => $('toast').classList.remove('show'), 1600);
+            };
+            document.addEventListener('click', async e => {
+                const btn = e.target.closest('[data-copy]');
+                if (!btn) return;
+                const g = GROUPS.find(x => x.key === btn.dataset.g);
+                const b = g.badges[btn.dataset.i];
+                const text = btn.dataset.copy === 'code' ? codeOf(g, b) : `${origin}/${b.img}`;
+                try {
+                    await navigator.clipboard.writeText(text);
+                    toast(btn.dataset.copy === 'code' ? `${b.label} 코드를 복사했어요` : '이미지 주소를 복사했어요');
+                } catch {
+                    prompt('복사해서 쓰세요', text);
+                }
+            });
+
+            // 캄몬스타즈 로고는 한 번만 받아 두고, 멤버를 바꿔 다시 그릴 때마다 붙인다(스타유니브 '팀 로고')
+            let starLogo = '';
+            function applyLogo() {
+                const logo = document.querySelector('[data-key="staruniv"] .avatar');
+                if (logo && starLogo) {
+                    logo.src = starLogo;
+                    logo.hidden = false;
+                }
+            }
+            const { url, key } = config.supabase;
+            fetch(`${url}/rest/v1/rpc/api_university_logos`, {
+                method: 'POST',
+                headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ p_names: [config.staruniv.name] }),
+            })
+                .then(r => r.json())
+                .then(([row]) => {
+                    if (!row?.path) return;
+                    starLogo = `${url}/storage/v1/object/public/staruniv-media/${row.path.split('/').map(encodeURIComponent).join('/')}`;
+                    applyLogo();
+                })
+                .catch(() => {});
+        </script>
+    </body>
+</html>
