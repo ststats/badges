@@ -1,0 +1,28 @@
+name: Test
+
+# 뱃지는 Vercel이 그린다(커밋하면 Vercel이 다시 배포). 여기서는 테스트만 돌린다.
+# 예전 GitHub Pages 판(크롬으로 5분마다 찍기)은 그만뒀고, 마지막으로 배포된 그림이 그대로 남아 있다.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      # 코드 모양은 Prettier로 맞춘다(스타유니브와 같은 설정). 고칠 땐 npm run format
+      - run: npm run format:check
+      - run: npm test
+      - run: npx playwright install --with-deps chromium
+      - run: node scripts/preview-autopost.mjs

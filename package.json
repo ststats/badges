@@ -1,0 +1,30 @@
+{
+  "name": "badges",
+  "private": true,
+  "type": "module",
+  "description": "멤버·스타유니브 뱃지(Vercel에서 볼 때마다 그림)와 멤버 공지 와고 자동 등록",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "dev": "node scripts/vercel-public.mjs && node scripts/dev-server.mjs",
+    "format": "prettier --write 'middleware.js' 'api/*.js' 'src/*.mjs' 'src/*.css' 'scripts/*.mjs' 'tests/*.mjs'",
+    "format:check": "prettier --check 'middleware.js' 'api/*.js' 'src/*.mjs' 'src/*.css' 'scripts/*.mjs' 'tests/*.mjs'"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "2.6.2",
+    "@vercel/functions": "3.9.11",
+    "jose": "6.2.12",
+    "sanitize-html": "2.18.0",
+    "satori": "0.47.1",
+    "sharp": "0.35.5"
+  },
+  "devDependencies": {
+    "playwright": "1.64.0",
+    "prettier": "3.9.9"
+  },
+  "overrides": {
+    "fflate": "0.7.5"
+  }
+}
